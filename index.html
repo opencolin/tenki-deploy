@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tenki — Agent Native Infrastructure</title>
+<style>
+  :root {
+    --bg: #000;
+    --fg: #ededed;
+    --muted: #8f8f8f;
+    --line: #262626;
+    --card: #0a0a0a;
+    --sand: #d9c9a3;
+    --accent: #fff;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; }
+
+  /* ---------- Nav ---------- */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px;
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(0,0,0,.7); backdrop-filter: blur(12px);
+    border-bottom: 1px solid transparent;
+  }
+  nav.scrolled { border-bottom-color: var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+  .brand-mark { display: grid; grid-template-columns: repeat(3, 7px); gap: 2.5px; }
+  .brand-mark i {
+    width: 7px; height: 7px; background: var(--fg); border-radius: 1.5px; display: block;
+  }
+  .brand-mark i:nth-child(2) { background: var(--sand); }
+  .brand-mark i.gap { background: transparent; }
+  .brand-name { font-weight: 600; font-size: 17px; letter-spacing: -0.02em; }
+  .nav-links { display: flex; gap: 4px; align-items: center; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none; font-size: 14px;
+    padding: 7px 12px; border-radius: 999px; transition: color .15s, background .15s;
+  }
+  .nav-links a:hover { color: var(--fg); background: #161616; }
+  .nav-cta {
+    background: var(--fg); color: #000 !important; font-weight: 500;
+  }
+  .nav-cta:hover { background: #d4d4d4 !important; color: #000 !important; }
+
+  /* ---------- Hero ---------- */
+  #view-hero {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center; padding: 12px 24px 90px;
+  }
+  .hero-canvas-wrap { position: relative; width: min(640px, 92vw); }
+  #logoCanvas { width: 100%; display: block; }
+  .hero-glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 55% 45% at 50% 46%, rgba(255,255,255,.09), transparent 70%);
+  }
+  h1.hero-title {
+    font-size: clamp(46px, 8.5vw, 88px);
+    line-height: 1.02; font-weight: 600; letter-spacing: -0.045em;
+    max-width: 12ch;
+    /* pull up so the first line overlaps the animation; sand falls behind the text */
+    margin: calc(min(640px, 92vw) * -0.115) auto 26px;
+    margin-bottom: 26px;
+    position: relative; z-index: 2;
+    /* dark halo so the headline stays readable over the animation */
+    text-shadow:
+      0 0 6px rgba(0,0,0,1),
+      0 0 14px rgba(0,0,0,1),
+      0 0 26px rgba(0,0,0,.98),
+      0 0 48px rgba(0,0,0,.9),
+      0 0 80px rgba(0,0,0,.75),
+      0 0 130px rgba(0,0,0,.55);
+  }
+  .tagline {
+    height: 26px; position: relative; width: 100%; margin-bottom: 40px;
+  }
+  .tagline span {
+    position: absolute; left: 0; right: 0;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 15px; color: var(--muted); letter-spacing: .04em;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  .tagline span.on { opacity: 1; transform: translateY(0); }
+  .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    border: none; cursor: pointer; font-size: 15px; font-weight: 500;
+    padding: 13px 28px; border-radius: 999px;
+    font-family: inherit; transition: all .15s ease;
+  }
+  .btn-primary { background: var(--fg); color: #000; }
+  .btn-primary:hover { background: #d4d4d4; }
+  .btn-ghost {
+    background: #0a0a0a; color: var(--fg); border: 1px solid var(--line);
+  }
+  .btn-ghost:hover { border-color: #555; }
+
+  .hero-top {
+    display: flex; flex-direction: column; align-items: center; width: 100%;
+  }
+
+  /* ---- wide screens: 3-column layout (title | animation | taglines) ---- */
+  @media (min-width: 1150px) {
+    #view-hero { padding-top: 30px; }
+    .hero-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(420px, 640px) minmax(0, 0.8fr);
+      grid-template-areas:
+        "title canvas tag"
+        "ctas  canvas tag";
+      align-items: center;
+      column-gap: 44px;
+      width: min(1440px, 96vw);
+      margin: 0 auto;
+    }
+    .hero-canvas-wrap { grid-area: canvas; width: 100%; }
+    h1.hero-title {
+      grid-area: title; align-self: end; justify-self: start;
+      margin: 0 0 10px; text-align: left;
+      font-size: clamp(44px, 4vw, 72px);
+      text-shadow: none;
+    }
+    .hero-ctas { grid-area: ctas; align-self: start; justify-self: start; justify-content: flex-start; }
+    .tagline {
+      grid-area: tag; justify-self: start;
+      height: auto; margin-bottom: 0;
+      display: flex; flex-direction: column; gap: 16px; text-align: left;
+    }
+    .tagline span { position: static; opacity: .4; transform: none; }
+    .tagline span.on { opacity: 1; }
+  }
+
+  .hero-products {
+    margin-top: 84px; display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: var(--radius); overflow: hidden; width: min(940px, 92vw);
+  }
+  .hero-products .cell {
+    background: var(--card); padding: 26px 24px; text-align: left;
+    transition: background .2s;
+  }
+  .hero-products .cell:hover { background: #111; }
+  .cell h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .cell h3 .dot { width: 7px; height: 7px; border-radius: 2px; background: var(--sand); display: inline-block; }
+  .cell p { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+  @media (max-width: 720px) { .hero-products { grid-template-columns: 1fr; } }
+
+  /* ---------- Deploy view ---------- */
+  #view-deploy { display: none; max-width: 1000px; margin: 0 auto; padding: 40px 24px 100px; }
+  .back {
+    background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 0; margin-bottom: 18px;
+    font-family: inherit;
+  }
+  .back:hover { color: var(--fg); }
+  .deploy-h { font-size: clamp(30px, 5vw, 44px); font-weight: 600; letter-spacing: -0.03em; margin-bottom: 8px; }
+  .deploy-sub { color: var(--muted); font-size: 15px; margin-bottom: 44px; }
+
+  .panel {
+    border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+    padding: 34px 32px; margin-bottom: 26px;
+  }
+  .panel-label {
+    font-family: "SF Mono", "Menlo", monospace; font-size: 11.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--sand); margin-bottom: 8px;
+  }
+  .panel h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .panel .hint { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+
+  /* prompt box */
+  .prompt-box { border: 1px solid #333; border-radius: 12px; background: #000; }
+  .prompt-box:focus-within { border-color: #666; }
+  .prompt-input-row { display: flex; align-items: flex-start; }
+  .prompt-glyph {
+    display: flex; align-items: flex-start; padding: 17px 4px 0 16px;
+    color: var(--sand); font-family: "SF Mono", monospace; font-size: 15px; user-select: none;
+  }
+  .prompt-box textarea {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--fg); font-size: 15.5px; line-height: 1.5;
+    padding: 14px 14px 2px; font-family: inherit;
+    resize: none; overflow-y: hidden;
+    min-height: 40px; max-height: 220px;
+    display: block;
+  }
+  .prompt-box textarea::placeholder { color: #666; }
+  .prompt-actions { display: flex; justify-content: flex-end; padding: 6px 10px 10px; }
+  .prompt-actions .btn { padding: 8px 20px; font-size: 14px; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--line); background: transparent; color: var(--fg);
+    font-size: 13.5px; padding: 9px 16px; border-radius: 999px; cursor: pointer;
+    font-family: inherit; transition: border-color .15s, background .15s;
+  }
+  .chip:hover { border-color: #555; background: #111; }
+  .prompt-foot { margin-top: 16px; color: var(--muted); font-size: 13.5px; }
+  .prompt-foot em { color: var(--sand); font-style: normal; }
+
+  /* review / git */
+  .tos { text-align: center; color: var(--muted); font-size: 14px; max-width: 52ch; margin: 4px auto 26px; line-height: 1.6; }
+  .tos b { color: #c9c9c9; font-weight: 500; }
+  .git-btns { display: flex; flex-direction: column; gap: 14px; max-width: 480px; margin: 0 auto; }
+  .git-btn {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    border: 1px solid var(--line); background: #000; color: var(--fg);
+    font-size: 16px; font-weight: 500; padding: 15px 20px; border-radius: 10px;
+    cursor: pointer; font-family: inherit; transition: border-color .15s, background .15s;
+  }
+  .git-btn:hover { border-color: #555; background: #0d0d0d; }
+  .git-btn svg { width: 22px; height: 22px; flex: none; }
+
+  /* templates */
+  .tpl-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+  .tpl-head a { color: var(--muted); font-size: 13.5px; text-decoration: none; }
+  .tpl-head a:hover { color: var(--fg); }
+  .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 680px) { .tpl-grid { grid-template-columns: 1fr; } }
+  .tpl-card {
+    border: 1px solid var(--line); border-radius: 12px; background: #000;
+    padding: 22px 22px 0; overflow: hidden; cursor: pointer; position: relative;
+    transition: border-color .15s;
+  }
+  .tpl-card:hover { border-color: #555; }
+  .tpl-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .tpl-card p { color: var(--muted); font-size: 13.5px; line-height: 1.55; min-height: 3.1em; }
+  .tpl-art {
+    margin-top: 18px; height: 92px; border-radius: 8px 8px 0 0;
+    border: 1px solid var(--line); border-bottom: none;
+    background: linear-gradient(180deg, #0e0e0e, #060606);
+    display: flex; align-items: center; justify-content: center;
+    color: #555; font-family: "SF Mono", monospace; font-size: 13px; letter-spacing: .06em;
+    transform: rotate(-1.2deg) translateY(6px); transform-origin: bottom left;
+  }
+  .tpl-card:hover .tpl-art { color: var(--sand); }
+
+  /* runners section */
+  .run-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 26px; align-items: center; }
+  .run-actions { display: flex; flex-direction: column; gap: 14px; }
+  .run-actions .wand { color: var(--sand); font-size: 18px; }
+  @media (max-width: 720px) { .run-grid { grid-template-columns: 1fr; } }
+  .run-steps { list-style: none; margin: 0; padding: 0; }
+  .run-steps li {
+    display: flex; gap: 14px; padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px; color: var(--muted); line-height: 1.55;
+  }
+  .run-steps li:last-child { border-bottom: none; }
+  .run-steps .n { font-family: "SF Mono", "Menlo", monospace; font-size: 12px; color: var(--sand); padding-top: 3px; }
+  .run-steps b { color: var(--fg); font-weight: 600; }
+  .code-card { border: 1px solid var(--line); border-radius: 10px; background: #000; overflow: hidden; }
+  .code-title {
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+    font-family: "SF Mono", "Menlo", monospace; font-size: 12px; color: #777;
+  }
+  .code-card pre {
+    margin: 0; padding: 16px; overflow-x: auto;
+    font-family: "SF Mono", "Menlo", monospace; font-size: 13px; line-height: 1.7; color: #bbb;
+  }
+  .code-card .del { color: #5a5a5a; }
+  .code-card .add { color: var(--sand); }
+  /* access section */
+  .access-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 760px) { .access-grid { grid-template-columns: 1fr; } }
+  .access-card {
+    border: 1px solid var(--line); border-radius: 12px; background: #000;
+    padding: 20px; display: flex; flex-direction: column; gap: 10px;
+    transition: border-color .15s;
+  }
+  .access-card:hover { border-color: #555; }
+  .access-card h3 { font-size: 15px; font-weight: 600; }
+  .access-card p { color: var(--muted); font-size: 13.5px; line-height: 1.55; flex: 1; }
+  .access-card .btn { align-self: flex-start; padding: 9px 18px; font-size: 14px; }
+  .access-snip {
+    font-family: "SF Mono", "Menlo", monospace; font-size: 12px; color: #8a8a8a;
+    background: #0a0a0a; border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 10px; white-space: nowrap; overflow-x: auto;
+  }
+  .agents-row2 { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 2px 0 24px; }
+  .agents-label { font-size: 13px; color: #888; margin-right: 4px; }
+  .agent-pill {
+    display: inline-flex; align-items: center; gap: 11px;
+    border: 1px solid var(--line); background: #000; color: var(--fg);
+    font-family: "SF Mono", "Menlo", monospace; font-size: 14.5px;
+    padding: 12px 24px; border-radius: 999px; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .agent-pill:hover { border-color: #555; background: #111; }
+  .agent-pill svg { flex: none; }
+  .agents-note { font-size: 12.5px; color: #666; }
+
+  .runner-sizes { align-items: center; margin-top: 20px; }
+  .sizes-label { font-size: 12.5px; color: #666; margin-right: 4px; }
+  .chip-mono { font-family: "SF Mono", "Menlo", monospace; font-size: 12px; }
+
+  footer {
+    border-top: 1px solid var(--line); color: #555; font-size: 13px;
+    padding: 48px 28px 28px;
+  }
+  .foot-grid {
+    display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 32px; max-width: 1000px; margin: 0 auto;
+  }
+  @media (max-width: 760px) { .foot-grid { grid-template-columns: 1fr 1fr; } }
+  .foot-brand .brand { margin-bottom: 12px; }
+  .foot-tag { color: #444; font-family: "SF Mono", "Menlo", monospace; font-size: 12.5px; }
+  .foot-col h4 {
+    color: var(--fg); font-size: 13px; font-weight: 600;
+    margin-bottom: 14px; letter-spacing: .01em;
+  }
+  .foot-col a {
+    display: block; color: var(--muted); text-decoration: none;
+    font-size: 13.5px; padding: 5px 0; transition: color .15s;
+  }
+  .foot-col a:hover { color: var(--fg); }
+  .foot-bottom {
+    max-width: 1000px; margin: 36px auto 0; padding-top: 20px;
+    border-top: 1px solid var(--line); color: #555; font-size: 12.5px;
+  }
+
+  .fade-in { animation: fadeUp .45s ease both; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <div class="brand" onclick="showHero()">
+    <div class="brand-mark" aria-hidden="true">
+      <i></i><i></i><i></i><i class="gap"></i><i></i><i class="gap"></i><i class="gap"></i><i class="gap"></i><i></i>
+    </div>
+    <span class="brand-name">tenki</span>
+  </div>
+  <div class="nav-links">
+    <a href="#">Products</a>
+    <a href="#">Docs</a>
+    <a href="#">Pricing</a>
+    <a href="#" class="nav-cta" onclick="showDeploy(); return false;">Deploy</a>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<main id="view-hero">
+  <div class="hero-top">
+  <div class="hero-canvas-wrap">
+    <div class="hero-glow"></div>
+    <canvas id="logoCanvas" width="640" height="380"></canvas>
+  </div>
+
+  <h1 class="hero-title">Agent Native Infrastructure</h1>
+
+  <div class="tagline" aria-live="polite">
+    <span class="on">code reviews by agents</span>
+    <span>github runners on demand</span>
+    <span>sandboxes in an instant</span>
+  </div>
+
+  <div class="hero-ctas">
+    <button class="btn btn-primary" onclick="showDeploy()">Deploy now</button>
+    <button class="btn btn-ghost">Talk to sales</button>
+  </div>
+  </div><!-- /hero-top -->
+
+  <div class="hero-products">
+    <div class="cell">
+      <h3><span class="dot"></span>Instant Sandbox</h3>
+      <p>A full dev environment in milliseconds. Use it, break it, walk away — it turns to sand.</p>
+    </div>
+    <div class="cell">
+      <h3><span class="dot"></span>Code Reviewer</h3>
+      <p>An agent reviews every pull request in a sandbox that exists only as long as the review does.</p>
+    </div>
+    <div class="cell">
+      <h3><span class="dot"></span>GitHub Runner</h3>
+      <p>CI runners that materialize for your workflow and vanish the moment the job is green.</p>
+    </div>
+  </div>
+</main>
+
+<!-- ============ DEPLOY ============ -->
+<main id="view-deploy">
+  <button class="back" onclick="showHero()">&larr; Back</button>
+  <h1 class="deploy-h">Let's make something temporary</h1>
+  <p class="deploy-sub">Pick a path. Everything below runs in an ephemeral sandbox — no setup, no leftovers.</p>
+
+  <!-- 1. prompt -->
+  <section class="panel">
+    <div class="panel-label">01 · Build</div>
+    <h2>Build something new</h2>
+    <p class="hint">Describe it. We spin up a sandbox and build it there.</p>
+    <div class="prompt-box">
+      <div class="prompt-input-row">
+        <span class="prompt-glyph">▚</span>
+        <textarea id="promptInput" rows="2"
+          placeholder="Run my eval suite across 50 parallel environments with reproducible snapshot states."></textarea>
+      </div>
+      <div class="prompt-actions">
+        <button class="btn btn-primary" onclick="fakeBuild()">Build</button>
+      </div>
+    </div>
+    <div class="chips">
+      <button class="chip" onclick="fillPrompt('Run my eval suite across 50 parallel environments with reproducible snapshot states.')">AI Evaluations</button>
+      <button class="chip" onclick="fillPrompt('Spin up a code interpreter that runs untrusted code with real-time output streaming.')">Code Interpreter</button>
+      <button class="chip" onclick="fillPrompt('Give my coding agent a sandbox with a RESTful API and state persistence across runs.')">Coding Agents</button>
+      <button class="chip" onclick="fillPrompt('Process a large dataset on a cluster with optimized data locality.')">Data Analysis</button>
+      <button class="chip" onclick="fillPrompt('Let my agent run code and instantly render charts, plots, and visual outputs.')">Data Visualisation</button>
+      <button class="chip" onclick="fillPrompt('Set up RL training environments for long-horizon planning with dynamic, stateful worlds.')">RL for Agents</button>
+      <button class="chip" onclick="fillPrompt('Give my agent a virtual computer it can use like a human would.')">Computer Use</button>
+    </div>
+    <p class="prompt-foot">You're <em>one prompt away</em>. You can also drag and drop your project, or choose a file or a folder.</p>
+  </section>
+
+  <!-- 2. access -->
+  <section class="panel">
+    <div class="panel-label">02 · Access</div>
+    <h2>Step into any sandbox</h2>
+    <p class="hint">Human in the loop when you need it — jump in, poke around, jump out. The sandbox keeps running.</p>
+    <div class="agents-row2">
+      <span class="agents-label">Bring your agent</span>
+      <button class="agent-pill">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#D97757" aria-hidden="true"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>
+        claude
+      </button>
+      <button class="agent-pill">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ededed" stroke-width="1.7" aria-hidden="true"><polygon points="19.79,16.5 12,21 4.21,16.5 4.21,7.5 12,3 19.79,7.5"/></svg>
+        codex
+      </button>
+      <button class="agent-pill">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#ededed" aria-hidden="true"><path d="M22 24H2V0h20zM17 4.8H7v14.4h10z"/></svg>
+        opencode
+      </button>
+      <span class="agents-note">Pre-installed in every sandbox — your local login and config stay untouched.</span>
+    </div>
+    <div class="access-grid">
+      <div class="access-card">
+        <h3>VS Code in the browser</h3>
+        <p>A full editor attached to your sandbox's filesystem, one click away.</p>
+        <button class="btn btn-ghost">Open VS Code</button>
+      </div>
+      <div class="access-card">
+        <h3>Terminal in the browser</h3>
+        <p>A real shell in the sandbox, streamed to your browser. No setup.</p>
+        <button class="btn btn-ghost">Open Terminal</button>
+      </div>
+      <div class="access-card">
+        <h3>SSH tunnel</h3>
+        <p>One click mints a tunnel for your own terminal and tools.</p>
+        <div class="access-snip">$ ssh sbx-42af@tunnel.tenki.cloud</div>
+        <button class="btn btn-ghost">Create SSH Tunnel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. review -->
+  <section class="panel">
+    <div class="panel-label">03 · Review</div>
+    <h2 style="text-align:center">Review your code</h2>
+    <p class="tos">If you don't have a Tenki account, by proceeding, you agree to creating
+      a Tenki account subject to our <b>Terms of Service</b> and <b>Privacy Policy</b>.</p>
+    <div class="git-btns">
+      <button class="git-btn">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        Continue with GitHub
+      </button>
+    </div>
+  </section>
+
+  <!-- 4. github runners -->
+  <section class="panel">
+    <div class="panel-label">04 · Run</div>
+    <div class="tpl-head">
+      <h2>Switch your GitHub Actions</h2>
+      <a href="https://tenki.cloud/docs/runners/quickstart" target="_blank" rel="noopener">Runners quickstart ↗</a>
+    </div>
+    <p class="hint">One line in your workflow. Ephemeral runner VMs spin up per job and vanish when it's green.</p>
+    <div class="run-grid">
+      <div class="run-actions">
+        <button class="git-btn">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="22" height="22"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          Install the GitHub App
+        </button>
+        <button class="git-btn">
+          <span class="wand">▚</span>
+          Start the Migration Wizard
+        </button>
+      </div>
+      <div class="code-card">
+        <div class="code-title">.github/workflows/ci.yml</div>
+        <pre>jobs:
+  build:
+<span class="del">-   runs-on: ubuntu-latest</span>
+<span class="add">+   runs-on: tenki-standard-medium-4c-8g</span></pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="foot-grid">
+    <div class="foot-brand">
+      <div class="brand" onclick="showHero()">
+        <div class="brand-mark" aria-hidden="true">
+          <i></i><i></i><i></i><i class="gap"></i><i></i><i class="gap"></i><i class="gap"></i><i class="gap"></i><i></i>
+        </div>
+        <span class="brand-name">tenki</span>
+      </div>
+      <p class="foot-tag mono">infrastructure, then sand.</p>
+    </div>
+    <div class="foot-col">
+      <h4>Products</h4>
+      <a href="#">Instant Sandbox</a>
+      <a href="#">Code Reviewer</a>
+      <a href="#">GitHub Runners</a>
+    </div>
+    <div class="foot-col">
+      <h4>Resources</h4>
+      <a href="https://tenki.cloud/docs" target="_blank" rel="noopener">Docs</a>
+      <a href="https://tenki.cloud/docs/runners/quickstart" target="_blank" rel="noopener">Runners Quickstart</a>
+      <a href="#">Pricing</a>
+    </div>
+    <div class="foot-col">
+      <h4>Connect</h4>
+      <a href="mailto:hello@tenki.cloud">hello@tenki.cloud</a>
+      <a href="https://discord.gg/qNFaWrR6um" target="_blank" rel="noopener">Discord</a>
+      <a href="#">Talk to sales</a>
+    </div>
+  </div>
+  <div class="foot-bottom">© 2026 Tenki Cloud. All rights reserved.</div>
+</footer>
+
+<script>
+/* ================= view switching ================= */
+const heroEl = document.getElementById('view-hero');
+const deployEl = document.getElementById('view-deploy');
+function showDeploy() {
+  heroEl.style.display = 'none';
+  deployEl.style.display = 'block';
+  deployEl.classList.remove('fade-in'); void deployEl.offsetWidth;
+  deployEl.classList.add('fade-in');
+  window.scrollTo(0, 0);
+}
+function showHero() {
+  deployEl.style.display = 'none';
+  heroEl.style.display = 'flex';
+  heroEl.classList.remove('fade-in'); void heroEl.offsetWidth;
+  heroEl.classList.add('fade-in');
+  window.scrollTo(0, 0);
+}
+function growPrompt() {
+  const i = document.getElementById('promptInput');
+  // size to exact content; when empty, size to the placeholder so it never clips
+  const wasEmpty = i.value === '';
+  if (wasEmpty) i.value = i.getAttribute('placeholder');
+  i.style.minHeight = '0';
+  i.style.height = '0';
+  const sh = i.scrollHeight;
+  i.style.minHeight = '';
+  if (wasEmpty) i.value = '';
+  const h = Math.max(40, Math.min(sh, 220));
+  i.style.height = h + 'px';
+  i.style.overflowY = sh > 220 ? 'auto' : 'hidden';
+}
+document.getElementById('promptInput').addEventListener('input', growPrompt);
+growPrompt();
+function fillPrompt(t) {
+  const i = document.getElementById('promptInput');
+  i.value = t; i.focus();
+  growPrompt();
+}
+function fakeBuild() {
+  const b = event.currentTarget;
+  b.textContent = 'Spinning up…';
+  setTimeout(() => b.textContent = 'Build', 1600);
+}
+window.addEventListener('scroll', () =>
+  document.getElementById('nav').classList.toggle('scrolled', scrollY > 8));
+
+/* ================= rotating tagline ================= */
+const tags = document.querySelectorAll('.tagline span');
+let tagIdx = 0;
+setInterval(() => {
+  tags[tagIdx].classList.remove('on');
+  setTimeout(() => {
+    tagIdx = (tagIdx + 1) % tags.length;
+    tags[tagIdx].classList.add('on');
+  }, 420);
+}, 2800);
+
+/* ================= sand logo animation =================
+   5 boxes appear one by one, then dissolve into sand one by one. */
+const canvas = document.getElementById('logoCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const W = 640, H = 380;
+canvas.width = W * DPR; canvas.height = H * DPR;
+ctx.scale(DPR, DPR);
+
+const N = 5, ROWS = 4, BOX = 42, GAP = 16;
+const rowW = N * BOX + (N - 1) * GAP;
+const gridH = ROWS * BOX + (ROWS - 1) * GAP;
+const x0 = (W - rowW) / 2, y0 = 62;
+const gridBottom = y0 + gridH;
+
+/* staggering runs as a diagonal wave: wave index w = row + col (0..8) */
+const T = {
+  appearWave: 130, appearDur: 420,
+  preMorph: 450, morphDur: 650, morphWave: 70,
+  spinHold: 1800,
+  dissolveWave: 300, dissolveDur: 1400,
+  logoDur: 3400,
+  endPause: 900,
+};
+const MAXW = (N - 1) + (ROWS - 1);
+const allAppeared = MAXW * T.appearWave + T.appearDur;
+const mStart = w => allAppeared + T.preMorph + w * T.morphWave;
+const lastMorphEnd = mStart(MAXW) + T.morphDur;
+const dStart = w => lastMorphEnd + T.spinHold + w * T.dissolveWave;
+const logoStart = dStart(MAXW) + T.dissolveDur;
+const loopLen = logoStart + T.logoDur + T.endPause;
+const SPIN = 0.0016;            // rad / ms
+const TILT = -0.42;             // resting X tilt once cubed
+
+let particles = [];
+let lastT = 0, lastFrame = performance.now(), start = performance.now();
+const spawnAcc = new Array(N * ROWS).fill(0);
+
+function easeOut(p) { return 1 - Math.pow(1 - p, 3); }
+
+/* icons shown inside the squares (2D phases only).
+   Brand paths from simple-icons (CC0), 24x24 viewBox. */
+const ICON_PATHS = {
+  claude: "m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z",
+  gemini: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81",
+  yc: "M0 24V0h24v24H0zM6.951 5.896l4.112 7.708v5.064h1.583v-4.972l4.148-7.799h-1.749l-2.457 4.875c-.372.745-.688 1.434-.688 1.434s-.297-.708-.651-1.434L8.831 5.896h-1.88z",
+  opencode: "M22 24H2V0h20zM17 4.8H7v14.4h10z",
+};
+const ICON_P2D = {};
+function iconFor(r, c) {
+  if (r === 0) return ['claude', 'codex', 'opencode', 'gemini', 'vscode'][c];
+  if (r === 1 && c === 2) return 'goose';
+  if (r === 2 && c === 2) return 'pi';
+  if (r === 3 && c === 3) return 'yc';
+  return null;
+}
+const BRAND = { claude: '#D97757', yc: '#F0652F', vscode: '#007ACC' };
+function drawIcon(kind, cx, cy, s, onDark) {
+  ctx.save();
+  const col = onDark ? '#d9d9d9' : (BRAND[kind] || '#161616');
+  ctx.strokeStyle = col; ctx.fillStyle = col;
+  ctx.lineWidth = Math.max(1.6, s * 0.085); ctx.lineCap = 'round';
+  const r = s * 0.28;
+  if (ICON_PATHS[kind]) {                      // real brand marks (simple-icons, CC0)
+    if (!ICON_P2D[kind]) ICON_P2D[kind] = new Path2D(ICON_PATHS[kind]);
+    const k = s * 0.55, sc = k / 24;
+    ctx.translate(cx - k / 2, cy - k / 2);
+    ctx.scale(sc, sc);
+    if (kind === 'gemini' && !onDark) {        // Gemini's blue→purple→red gradient
+      const g = ctx.createLinearGradient(0, 24, 24, 0);
+      g.addColorStop(0, '#217BFE');
+      g.addColorStop(0.5, '#9177C7');
+      g.addColorStop(1, '#D3646F');
+      ctx.fillStyle = g;
+    }
+    ctx.fill(ICON_P2D[kind]);
+  } else if (kind === 'codex') {               // stylized: hexagon
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = Math.PI / 6 + k * Math.PI / 3;
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath(); ctx.stroke();
+  } else if (kind === 'hermes') {              // stylized: wing
+    const ox = cx - r, oy = cy + r * 0.6;
+    for (let i = 0; i < 3; i++) {
+      const t = i / 2;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.quadraticCurveTo(
+        cx - r * 0.15, cy - r * (1.15 - t * 0.6),
+        cx + r * (1 - t * 0.3), cy - r * (0.6 - t * 0.65));
+      ctx.stroke();
+    }
+  } else if (kind === 'goose') {               // stylized: goose silhouette
+    ctx.beginPath();
+    ctx.moveTo(cx + r * 0.95, cy + r * 0.1);                                   // tail
+    ctx.quadraticCurveTo(cx + r * 0.6, cy + r * 0.95, cx - r * 0.3, cy + r * 0.9);   // belly
+    ctx.quadraticCurveTo(cx - r * 0.95, cy + r * 0.85, cx - r * 0.8, cy + r * 0.15); // chest
+    ctx.quadraticCurveTo(cx - r * 0.75, cy - r * 0.35, cx - r * 0.55, cy - r * 0.6); // neck front
+    ctx.lineTo(cx - r * 1.2, cy - r * 0.45);                                   // beak tip
+    ctx.lineTo(cx - r * 0.45, cy - r * 0.95);                                  // head top
+    ctx.quadraticCurveTo(cx - r * 0.15, cy - r * 0.75, cx - r * 0.12, cy - r * 0.15); // neck back
+    ctx.quadraticCurveTo(cx + r * 0.35, cy - r * 0.4, cx + r * 0.95, cy + r * 0.1);   // back
+    ctx.closePath(); ctx.fill();
+  } else if (kind === 'openclaw') {            // stylized: claw slashes
+    for (let i = -1; i <= 1; i++) {
+      const d = i * r * 0.62;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.55 + d, cy - r * 0.9);
+      ctx.quadraticCurveTo(cx + d, cy - r * 0.05, cx + d + r * 0.4, cy + r * 0.9);
+      ctx.stroke();
+    }
+  } else {                                     // text glyphs
+    const glyph = { pi: 'π', vscode: '{ }', terminal: '>_' }[kind];
+    if (!glyph) { ctx.restore(); return; }
+    ctx.font = `600 ${Math.round(s * 0.40)}px "SF Mono", "Menlo", monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(glyph, cx, cy + s * 0.02);
+  }
+  ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function frame(now) {
+  const dt = Math.min((now - lastFrame) / 1000, 0.05);
+  lastFrame = now;
+  let t = (now - start) % loopLen;
+  if (t < lastT) { particles = []; spawnAcc.fill(0); }   // new loop
+  lastT = t;
+
+  ctx.clearRect(0, 0, W, H);
+
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < N; c++) {
+    const idx = r * N + c;
+    const w = r + c;                             // diagonal wave index
+    // white fill: top row, center column — except last row, where it's the 2nd box
+    const isWhite = r === 0 || (r === ROWS - 1 ? c === 3 : c === 2);
+    const bx = x0 + c * (BOX + GAP);
+    const by = y0 + r * (BOX + GAP);
+    const cx = bx + BOX / 2, cy = by + BOX / 2, s = BOX / 2;
+    const aStart = w * T.appearWave;
+    const ms = mStart(w);
+    const ds = dStart(w);
+
+    if (t < aStart) continue;
+
+    if (t < aStart + T.appearDur) {
+      // appearing (flat box)
+      const p = easeOut((t - aStart) / T.appearDur);
+      const sc = 0.6 + 0.4 * p;
+      const sz = BOX * sc, off = (BOX - sz) / 2;
+      ctx.globalAlpha = p;
+      drawBox(bx + off, by + off, sz, sz, isWhite);
+      { const ic = iconFor(r, c); if (ic) drawIcon(ic, cx, cy, sz, !isWhite); }
+      ctx.globalAlpha = 1;
+    } else if (t < ms) {
+      // solid flat box, waiting to cube up
+      drawBox(bx, by, BOX, BOX, isWhite);
+      { const ic = iconFor(r, c); if (ic) drawIcon(ic, cx, cy, BOX, !isWhite); }
+    } else {
+      // ---- cube territory ----
+      const md = Math.min(1, (t - ms) / T.morphDur);
+      const depth = easeOut(md);                 // 0 flat -> 1 full cube
+      const dir = (r + c) % 2 ? 1 : -1;          // checkerboard spin directions
+      const spd = SPIN * (0.8 + ((r * 5 + c * 3) % 5) * 0.09);
+      const ay = dir * spd * (t - ms);           // spin around Y
+      const ax = TILT * depth;                   // tilt in as it extrudes
+
+      if (t < ds) {
+        // spinning cube (crossfade from rounded box in first 120ms)
+        drawCube(cx, cy, s, depth, ay, ax, isWhite);
+        const boxA = Math.max(0, 1 - (t - ms) / 120);
+        if (boxA > 0) {
+          ctx.globalAlpha = boxA;
+          drawBox(bx, by, BOX, BOX, isWhite);
+          { const ic = iconFor(r, c); if (ic) drawIcon(ic, cx, cy, BOX, !isWhite); }
+          ctx.globalAlpha = 1;
+        }
+      } else if (t < ds + T.dissolveDur) {
+        // dissolve the spinning cube from the bottom up
+        const p = (t - ds) / T.dissolveDur;
+        const Hh = s * 1.7;                      // bounding half-height while spinning
+        const lineY = cy + Hh - easeOut(p) * 2 * Hh;
+        const clipTop = cy - 2.2 * s;
+        if (lineY > clipTop + 1) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(cx - 2.2 * s, clipTop, 4.4 * s, lineY - clipTop);
+          ctx.clip();
+          ctx.globalAlpha = 1 - p * 0.3;
+          drawCube(cx, cy, s, depth, ay, ax, isWhite);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+        // spawn sand at the erosion line
+        spawnAcc[idx] += dt * 150;
+        while (spawnAcc[idx] >= 1) {
+          spawnAcc[idx] -= 1;
+          particles.push({
+            x: cx + (Math.random() - .5) * 2 * s * 1.35,
+            y: lineY + (Math.random() - .5) * 3,
+            vx: (Math.random() - .5) * 24,
+            vy: 10 + Math.random() * 40,
+            life: 0.8 + Math.random() * 1.0,
+            age: 0,
+            r: 0.7 + Math.random() * 1.3,
+            sandy: Math.random(),
+          });
+        }
+      }
+    }
+  }
+
+  // pulsating logo: only the white-square pattern, after the dissolve
+  if (t >= logoStart && t < logoStart + T.logoDur) {
+    const tl = t - logoStart;
+    const fade = Math.min(1, tl / 450) * Math.min(1, (T.logoDur - tl) / 550);
+    const breath = 0.72 + 0.28 * Math.sin(2 * Math.PI * tl / 950 - Math.PI / 2);
+    ctx.globalAlpha = fade * breath;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < N; c++) {
+      const white = r === 0 || (r === ROWS - 1 ? c === 3 : c === 2);
+      if (!white) continue;
+      const lx = x0 + c * (BOX + GAP), ly = y0 + r * (BOX + GAP);
+      drawBox(lx, ly, BOX, BOX, true);
+      const ic = iconFor(r, c);
+      if (ic) drawIcon(ic, lx + BOX / 2, ly + BOX / 2, BOX);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // particles
+  for (let k = particles.length - 1; k >= 0; k--) {
+    const q = particles[k];
+    q.age += dt;
+    if (q.age > q.life) { particles.splice(k, 1); continue; }
+    q.vy += 300 * dt;                         // gravity
+    q.vx *= (1 - 0.6 * dt);
+    q.x += q.vx * dt + Math.sin((q.age * 9) + q.r * 40) * 0.25;
+    q.y += q.vy * dt;
+    const a = 1 - (q.age / q.life);
+    // white grains cool into sand
+    const mix = Math.min(1, q.age * 1.6 * (0.5 + q.sandy));
+    const r = Math.round(237 + (217 - 237) * mix);
+    const g = Math.round(237 + (201 - 237) * mix);
+    const b = Math.round(237 + (163 - 237) * mix);
+    ctx.fillStyle = `rgba(${r},${g},${b},${a * 0.9})`;
+    ctx.fillRect(q.x, q.y, q.r, q.r);
+  }
+
+  // soft settled dune (radial, no hard edges)
+  const duneA = Math.min(0.5, particles.length / 900);
+  if (duneA > 0.02) {
+    const cx = W / 2, cy = gridBottom + 58;
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, rowW * 0.6);
+    grd.addColorStop(0, `rgba(217,201,163,${duneA * 0.22})`);
+    grd.addColorStop(1, 'rgba(217,201,163,0)');
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(1, 0.16); ctx.translate(-cx, -cy);
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(cx, cy, rowW * 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  requestAnimationFrame(frame);
+}
+
+function drawBox(x, y, w, h, white) {
+  h = h === undefined ? w : h;
+  // glow
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,255,255,0.5)';
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = white ? '#ededed' : '#050505';
+  roundRect(x, y, w, h, Math.min(8, h / 2));
+  ctx.fill();
+  ctx.restore();
+  // face + edge
+  ctx.fillStyle = white ? '#ededed' : '#0a0a0a';
+  roundRect(x, y, w, h, Math.min(10, h / 2));
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+}
+
+/* ---- 3D cube ---- */
+const CUBE_V = [
+  [-1,-1,-1],[1,-1,-1],[-1,1,-1],[1,1,-1],
+  [-1,-1, 1],[1,-1, 1],[-1,1, 1],[1,1, 1],
+];
+const CUBE_F = [
+  [0,1,3,2], [5,4,6,7],   // front, back
+  [4,0,2,6], [1,5,7,3],   // left, right
+  [4,5,1,0], [2,3,7,6],   // top, bottom
+];
+const LIGHT = (() => {
+  const v = [-0.35, -0.6, -0.72], l = Math.hypot(v[0], v[1], v[2]);
+  return v.map(a => a / l);
+})();
+
+function drawCube(cx, cy, s, depth, ay, ax, white) {
+  const cosY = Math.cos(ay), sinY = Math.sin(ay);
+  const cosX = Math.cos(ax), sinX = Math.sin(ax);
+  const f = 330;
+  const rot = [], proj = [];
+  for (const [vx, vy, vz] of CUBE_V) {
+    let x = vx * s, y = vy * s, z = vz * s * Math.max(depth, 0.001);
+    // rotate Y
+    let x1 = x * cosY + z * sinY;
+    let z1 = -x * sinY + z * cosY;
+    // rotate X
+    let y1 = y * cosX - z1 * sinX;
+    let z2 = y * sinX + z1 * cosX;
+    rot.push([x1, y1, z2]);
+    const k = f / (f + z2);
+    proj.push([cx + x1 * k, cy + y1 * k]);
+  }
+  // soft halo (cheaper than per-face shadows at 25 cubes)
+  const hg = ctx.createRadialGradient(cx, cy, 0, cx, cy, s * 2.4);
+  hg.addColorStop(0, 'rgba(255,255,255,0.10)');
+  hg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(cx - s * 2.4, cy - s * 2.4, s * 4.8, s * 4.8);
+
+  // painter's sort: far faces first
+  const order = CUBE_F.map((face, idx) => {
+    const z = face.reduce((a, vi) => a + rot[vi][2], 0) / 4;
+    return { face, z, idx };
+  }).sort((a, b) => b.z - a.z);
+
+  for (const { face } of order) {
+    const [a, b, c] = [rot[face[0]], rot[face[1]], rot[face[2]]];
+    // outward normal (flip toward face center if needed)
+    let nx = (b[1]-a[1])*(c[2]-a[2]) - (b[2]-a[2])*(c[1]-a[1]);
+    let ny = (b[2]-a[2])*(c[0]-a[0]) - (b[0]-a[0])*(c[2]-a[2]);
+    let nz = (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]);
+    const mx = (a[0]+b[0]+c[0]) / 3, my = (a[1]+b[1]+c[1]) / 3, mz = (a[2]+b[2]+c[2]) / 3;
+    if (nx*mx + ny*my + nz*mz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    const br = Math.max(0, (nx*LIGHT[0] + ny*LIGHT[1] + nz*LIGHT[2]) / nl);
+    const g = white ? Math.round(168 + 87 * br) : Math.round(8 + 26 * br);
+
+    ctx.beginPath();
+    ctx.moveTo(proj[face[0]][0], proj[face[0]][1]);
+    for (let k = 1; k < 4; k++) ctx.lineTo(proj[face[k]][0], proj[face[k]][1]);
+    ctx.closePath();
+    ctx.fillStyle = `rgb(${g},${g},${g})`;
+    ctx.fill();
+
+    ctx.strokeStyle = white ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(proj[face[0]][0], proj[face[0]][1]);
+    for (let k = 1; k < 4; k++) ctx.lineTo(proj[face[k]][0], proj[face[k]][1]);
+    ctx.closePath();
+    ctx.stroke();
+  }
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
