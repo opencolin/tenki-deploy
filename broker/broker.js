@@ -128,6 +128,7 @@ async function createDemoSession(req, res) {
     recent.push(now);
     createTimes.set(ipHash, recent);
     log("demo_created", { id: session.id, ipHash });
+    warmKimi(session.id);
     return json(res, 201, publicSession(session));
   } catch (e) {
     if (e instanceof QuotaExceededError || e instanceof CapacityUnavailableError)
@@ -165,7 +166,9 @@ async function openTerminal(req, res, id) {
   const body = await readJson(req);
   const agent = AGENTS.has(body.agent) ? body.agent : null;
   const prompt = typeof body.prompt === "string" ? body.prompt.slice(0, 4000) : "";
-  const command = agent || "bash";
+  const kimi = body.kimi === true && !!agent;
+  if (kimi && !process.env.NEBIUS_API_KEY) return json(res, 501, { error: "kimi_unconfigured" });
+  const command = agent ? (kimi ? `kimi-${agent}` : agent) : "bash";
   // reuse the current terminal only for a same-command, promptless request;
   // a prompt always relaunches so the agent starts with the new prompt
   if (!prompt && entry.terminal && entry.terminal.agent === command &&
@@ -185,7 +188,23 @@ async function openTerminal(req, res, id) {
       codex: 'exec codex "$(cat /tmp/prompt.txt)"',
       opencode: 'exec opencode --prompt "$(cat /tmp/prompt.txt)"',
     };
-    const launch = agent && prompt ? AGENT_LAUNCH[agent] : agent ? `exec ${agent}` : "exec bash";
+    let launch;
+    if (kimi) {
+      // kimirelay fronts the agent with Kimi K3 on Nebius — no agent login.
+      // kimirelay passes extra args through to the underlying agent.
+      const run =
+        agent === "opencode"
+          ? prompt ? 'exec kimirelay opencode --prompt "$(cat /tmp/prompt.txt)"' : "exec kimirelay opencode"
+          : prompt ? `exec kimirelay ${agent} "$(cat /tmp/prompt.txt)"` : `exec kimirelay ${agent}`;
+      launch = [
+        `export NEBIUS_API_KEY='${process.env.NEBIUS_API_KEY}'`,
+        'export PATH="$HOME/.kimirelay/bin:$PATH"',
+        'command -v kimirelay >/dev/null 2>&1 || { echo "installing kimi-relay…"; curl -fsSL https://kimirelay.com/install.sh | sh >/tmp/kimirelay-install.log 2>&1 || echo "kimi-relay install failed — see /tmp/kimirelay-install.log"; }',
+        run,
+      ].join("\n");
+    } else if (agent && prompt) launch = AGENT_LAUNCH[agent];
+    else if (agent) launch = `exec ${agent}`;
+    else launch = "exec bash";
     const scriptB64 = Buffer.from(`#!/bin/bash\n${launch}\n`).toString("base64");
     const promptB64 = Buffer.from(prompt).toString("base64");
     const token = crypto.randomBytes(16).toString("base64url");
@@ -220,6 +239,26 @@ async function openTerminal(req, res, id) {
     log("terminal_failed", { id, message: e.message });
     return json(res, 502, { error: "terminal_failed" });
   }
+}
+
+/* Preinstall kimi-relay while the visitor is still reading the page, so a
+ * Kimi K3 terminal opens without an install pause. Fire-and-forget. */
+function warmKimi(id) {
+  if (!process.env.NEBIUS_API_KEY) return;
+  (async () => {
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const s = await client.get(id);
+      if (isTerminal(s.state)) return;
+      if (s.state === "RUNNING") {
+        await s.exec("bash", {
+          args: ["-lc", "nohup sh -c 'curl -fsSL https://kimirelay.com/install.sh | sh' >/tmp/kimirelay-install.log 2>&1 </dev/null &"],
+          timeoutMs: 10_000,
+        });
+        return;
+      }
+    }
+  })().catch((e) => log("kimi_warmup_failed", { id, message: e.message }));
 }
 
 async function destroyDemoSession(res, id) {

@@ -5,6 +5,8 @@
 > Implementation notes: broker lives in `broker/` (Node, `@tenkicloud/sandbox@0.5.4`); ttyd runs on port **8080** inside demo sandboxes — the platform rejects exposing non-standard ports (7681 fails with `invalid_argument`; the base image runs its own ttyd there). Frontend falls back to an inline "open it ↗" link when a popup blocker eats the terminal window.
 >
 > Shipped beyond original P0 scope (2026-08-01): **self-destruct** (DELETE /api/demo-sessions/:id + status-line button), **agent pills wired** (claude/codex/opencode launch in the browser terminal — all three ship in the base image), and **Build wired** (agent selector + prompt → terminal running the chosen agent with that prompt, passed base64 so visitor text never touches shell quoting). P2 item 11 is therefore partially delivered.
+>
+> **Kimi K3 toggle** (2026-08-01): a Build-panel toggle routes agent launches through [kimi-relay](https://github.com/opencolin/kimi-relay) to Kimi K3 on Nebius Token Factory — no agent login. Broker launches `kimirelay <agent>` with `NEBIUS_API_KEY` from its env; relay preinstalls in each demo sandbox right after creation (bun ships in the base image, install ≈1.5s). **Known trade-off:** the Nebius key is readable by any visitor inside their demo sandbox shell — use a spend-capped key and rotate it.
 
 ## Problem Statement
 

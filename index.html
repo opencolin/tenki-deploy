@@ -222,6 +222,7 @@
   .agent-select { display: flex; gap: 6px; margin-right: auto; }
   .agent-select .chip { margin: 0; }
   .agent-select .chip.sel { border-color: var(--fg); color: var(--fg); }
+  .kimi-chip.sel { border-color: var(--sand); color: var(--sand); }
   .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
   .chip {
     display: inline-flex; align-items: center; gap: 7px;
@@ -441,6 +442,8 @@
           <button class="chip" onclick="selectAgent(this, 'codex')">codex</button>
           <button class="chip" onclick="selectAgent(this, 'opencode')">opencode</button>
         </div>
+        <button class="chip kimi-chip" id="kimiToggle" onclick="toggleKimi()"
+          title="Route agents through kimi-relay to Kimi K3 on Nebius Token Factory — no agent login needed">Kimi K3 · off</button>
         <button class="btn btn-primary" id="buildBtn" onclick="buildInSandbox(this)" disabled>Build</button>
       </div>
     </div>
@@ -636,6 +639,18 @@ function selectAgent(btn, name) {
   buildAgent = name;
   document.querySelectorAll('.agent-select .chip').forEach(c => c.classList.toggle('sel', c === btn));
 }
+let kimiOn = sessionStorage.getItem('kimiK3') === '1';
+function renderKimi() {
+  const b = document.getElementById('kimiToggle');
+  b.classList.toggle('sel', kimiOn);
+  b.textContent = 'Kimi K3 · ' + (kimiOn ? 'on' : 'off');
+}
+function toggleKimi() {
+  kimiOn = !kimiOn;
+  sessionStorage.setItem('kimiK3', kimiOn ? '1' : '0');
+  renderKimi();
+}
+renderKimi();
 function buildInSandbox(btn) {
   const input = document.getElementById('promptInput');
   const prompt = input.value.trim() || input.getAttribute('placeholder');
@@ -746,7 +761,7 @@ async function openTerminal(agent, el, prompt) {
     const r = await fetch(`${SBX_API}/${sbx.id}/terminal`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(agent ? { agent, prompt } : {}),
+      body: JSON.stringify(agent ? { agent, prompt, kimi: kimiOn } : {}),
     });
     if (!r.ok) throw new Error();
     const { url } = await r.json();
