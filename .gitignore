@@ -5,3 +5,5 @@ icon-paths.json
 /package.json
 /package-lock.json
 .env
+broker/state.json
+broker/.env

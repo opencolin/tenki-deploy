@@ -37,6 +37,17 @@ const IDLE_TIMEOUT_MINUTES = 10;
 const TTYD_PORT = Number(process.env.TTYD_PORT || 8080);
 // ships in the base image; the terminal launches one of these instead of bash
 const AGENTS = new Set(["claude", "codex", "opencode"]);
+// Public URL of THIS broker/site, so a sandbox can call back to publish a port.
+// Required for the deploy feature; without it, `tenki-publish` is unavailable.
+const BROKER_PUBLIC_URL = (process.env.BROKER_PUBLIC_URL || "").replace(/\/$/, "");
+// Ports the platform allows a preview on (8080 = ttyd, 7681 = base-image ttyd).
+const EXPOSABLE_PORTS = new Set([3000, 5000, 8000, 8081, 9000]);
+const MAX_EXPOSES_PER_SESSION = 20;
+// Constant-time token compare (avoids leaking the token via timing).
+const tokenEq = (a, b) => {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
 
 /* Dropped into the sandbox as AGENTS.md + CLAUDE.md. Without it agents reach
  * for GitHub Pages / Vercel / a tunnel and stall on credentials, when the
@@ -61,13 +72,12 @@ the public internet directly, in two steps:
 
 2. Publish it and read back the URL:
 
-       tenki sandbox expose --session "$TENKI_SESSION_ID" --port 3000
+       tenki-publish 3000
 
-   It prints a \`preview_url\` — a public HTTPS address. Give that to the user;
-   that is the deployed site.
-
-\`tenki sandbox ports --session "$TENKI_SESSION_ID"\` lists what is already
-published. The CLI is authenticated already — no login, no API key setup.
+   It prints JSON like \`{"url":"https://…"}\` — a public HTTPS address. Give
+   that URL to the user; that is the deployed site. \`tenki-publish\` asks this
+   sandbox's own host to expose the port; there is no login or API key to set up,
+   and it can only ever publish ports on *this* sandbox.
 
 ## Rules
 
@@ -162,7 +172,13 @@ async function createDemoSession(req, res) {
       metadata: { demo: "true", source: "landing-page", ip_hash: ipHash },
       waitReady: false,
     });
-    tracked[session.id] = { createdAt: now, ipHash, terminal: null };
+    tracked[session.id] = {
+      createdAt: now, ipHash, terminal: null,
+      // Per-session secret: lets the sandbox publish its OWN ports via the broker
+      // without ever holding the workspace key. Never sent to the browser.
+      exposeToken: crypto.randomBytes(24).toString("base64url"),
+      exposeCount: 0,
+    };
     saveState();
     recent.push(now);
     createTimes.set(ipHash, recent);
@@ -202,6 +218,8 @@ async function getDemoSession(res, id) {
 async function openTerminal(req, res, id) {
   const entry = tracked[id];
   if (!entry) return json(res, 404, { error: "not_found" });
+  // Backfill a token for sessions created before this field existed.
+  if (!entry.exposeToken) { entry.exposeToken = crypto.randomBytes(24).toString("base64url"); saveState(); }
   const body = await readJson(req);
   const agent = AGENTS.has(body.agent) ? body.agent : null;
   const prompt = typeof body.prompt === "string" ? body.prompt.slice(0, 4000) : "";
@@ -242,13 +260,26 @@ async function openTerminal(req, res, id) {
     const argv = agent
       ? [agent, fullAuto ? AGENT_FLAGS[agent] : "", prompt ? promptArg : ""].filter(Boolean).join(" ")
       : "bash";
-    // Tenki is the deploy target for whatever the agent builds, so the CLI is
-    // authenticated and self-aware in every session regardless of model choice.
+    // Deploy path: the sandbox publishes its OWN ports by calling back to the
+    // broker with a per-session token. The workspace key (TENKI_API_KEY) stays
+    // here and NEVER enters the VM — the visitor is root in it and could read
+    // anything on disk or in the env. `tenki-publish <port>` is a tiny wrapper
+    // the agent runs; it returns {"url":"https://…"}.
+    const publishHelper =
+      "mkdir -p $HOME/.local/bin && cat > $HOME/.local/bin/tenki-publish <<'PUBLISH'\n" +
+      "#!/bin/bash\n" +
+      "port=\"${1:?usage: tenki-publish <port>}\"\n" +
+      "curl -fsS -X POST \"$TENKI_BROKER_URL/api/demo-sessions/$TENKI_SESSION_ID/expose\" \\\n" +
+      "  -H \"x-expose-token: $TENKI_EXPOSE_TOKEN\" -H 'content-type: application/json' \\\n" +
+      "  -d \"{\\\"port\\\":$port}\"\n" +
+      "PUBLISH\n" +
+      "chmod +x $HOME/.local/bin/tenki-publish";
     const tenkiEnv = [
-      `export TENKI_AUTH_TOKEN='${process.env.TENKI_API_KEY}'`,
       `export TENKI_SESSION_ID='${id}'`,
+      `export TENKI_EXPOSE_TOKEN='${entry.exposeToken}'`,
+      `export TENKI_BROKER_URL='${BROKER_PUBLIC_URL}'`,
       'export PATH="$HOME/.local/bin:$PATH"',
-      'command -v tenki >/dev/null 2>&1 || curl -fsSL https://tenki.cloud/install.sh | bash >/tmp/tenki-cli-install.log 2>&1',
+      publishHelper,
     ];
     let launch;
     if (kimi) {
@@ -298,6 +329,44 @@ async function openTerminal(req, res, id) {
     }
     log("terminal_failed", { id, message: e.message });
     return json(res, 502, { error: "terminal_failed" });
+  }
+}
+
+/* The sandbox publishes one of its OWN ports, authenticated by its per-session
+ * expose token. This is what lets the workspace key stay in the broker and never
+ * enter the visitor-controlled VM. Scoped hard: only this session, only an
+ * allow-listed port, and capped per session. */
+async function exposePort(req, res, id) {
+  const entry = tracked[id];
+  if (!entry) return json(res, 404, { error: "not_found" });
+  const supplied = req.headers["x-expose-token"] || "";
+  if (!entry.exposeToken || !tokenEq(supplied, entry.exposeToken))
+    return json(res, 403, { error: "forbidden" });
+  if ((entry.exposeCount || 0) >= MAX_EXPOSES_PER_SESSION)
+    return json(res, 429, { error: "expose_limit" });
+  const body = await readJson(req);
+  const port = Number(body.port);
+  if (!EXPOSABLE_PORTS.has(port))
+    return json(res, 400, { error: "bad_port", allowed: [...EXPOSABLE_PORTS] });
+  try {
+    const s = await client.get(id);
+    if (s.state !== "RUNNING") return json(res, 409, { error: "not_running", state: s.state });
+    const remainingMs = Math.max(60_000, new Date(s.timeoutAt) - Date.now());
+    const exposed = await s.exposePort(port, { ttlMs: remainingMs });
+    entry.exposeCount = (entry.exposeCount || 0) + 1;
+    saveState();
+    log("port_exposed", { id, port });
+    return json(res, 200, {
+      url: exposed.previewUrl,
+      expiresAt: exposed.expiresAt ?? new Date(Date.now() + remainingMs).toISOString(),
+    });
+  } catch (e) {
+    if (e instanceof SessionNotFoundError) {
+      delete tracked[id]; saveState();
+      return json(res, 410, { error: "expired" });
+    }
+    log("expose_failed", { id, port, message: e.message });
+    return json(res, 502, { error: "expose_failed" });
   }
 }
 
@@ -382,6 +451,7 @@ http.createServer(async (req, res) => {
       if (req.method === "GET" && seg.length === 3) return await getDemoSession(res, seg[2]);
       if (req.method === "DELETE" && seg.length === 3) return await destroyDemoSession(res, seg[2]);
       if (req.method === "POST" && seg.length === 4 && seg[3] === "terminal") return await openTerminal(req, res, seg[2]);
+      if (req.method === "POST" && seg.length === 4 && seg[3] === "expose") return await exposePort(req, res, seg[2]);
       return json(res, 404, { error: "not_found" });
     }
     if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, res);
