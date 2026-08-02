@@ -6,7 +6,9 @@
 >
 > Shipped beyond original P0 scope (2026-08-01): **self-destruct** (DELETE /api/demo-sessions/:id + status-line button), **agent pills wired** (claude/codex/opencode launch in the browser terminal — all three ship in the base image), and **Build wired** (agent selector + prompt → terminal running the chosen agent with that prompt, passed base64 so visitor text never touches shell quoting). P2 item 11 is therefore partially delivered.
 >
-> **Kimi K3 toggle** (2026-08-01): a Build-panel toggle routes agent launches through [kimi-relay](https://github.com/opencolin/kimi-relay) to Kimi K3 on Nebius Token Factory — no agent login. Broker launches `kimirelay <agent>` with `NEBIUS_API_KEY` from its env; relay preinstalls in each demo sandbox right after creation (bun ships in the base image, install ≈1.5s). **Known trade-off:** the Nebius key is readable by any visitor inside their demo sandbox shell — use a spend-capped key and rotate it.
+> **Kimi K3 toggle** (2026-08-01): toggles in both the Build panel and 02 Access route agent launches through [kimi-relay](https://github.com/opencolin/kimi-relay) to Kimi K3 on Nebius Token Factory — no agent login. Both toggles share one state and are **on by default** (off only if the visitor switches it off). Broker launches `kimirelay <agent>` with `NEBIUS_API_KEY` (+ `TAVILY_API_KEY` when set) from its env; relay preinstalls in each demo sandbox right after creation (bun ships in the base image, install ≈1.5s).
+>
+> **Known trade-off — audited 2026-08-01:** the Nebius and Tavily keys are trivially readable by any visitor: `/tmp/launch.sh` holds them in plaintext (mode 755), visitors have passwordless sudo in their own VM, and Claude Code's own Bash tool will print them on request. There is no way to hide a secret in a VM the visitor controls as root. Confirmed *not* exposed: `TENKI_API_KEY` never enters demo sandboxes (verified: zero hits). With the toggle now default-on, every visitor agent session spends the Nebius key — use a spend-capped, rotatable key. The durable fix is running the relay centrally on the hosting sandbox and issuing per-session tokens to sandboxes (see P2).
 
 ## Problem Statement
 

@@ -449,8 +449,8 @@
             <svg viewBox="0 0 240 300" width="14.4" height="18" aria-hidden="true"><path d="M180 240H60V120H180V240Z" fill="#4B4646"/><path d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" fill="#F1ECEC"/></svg>
           </button>
         </div>
-        <button class="chip kimi-chip" id="kimiToggle" onclick="toggleKimi()"
-          title="Route agents through kimi-relay to Kimi K3 on Nebius Token Factory — no agent login needed">Kimi K3 · off</button>
+        <button class="chip kimi-chip sel" onclick="toggleKimi()"
+          title="Route agents through kimi-relay to Kimi K3 on Nebius Token Factory — no agent login needed">Kimi K3 · on</button>
         <button class="btn btn-primary" id="buildBtn" onclick="buildInSandbox(this)" disabled>Build</button>
       </div>
     </div>
@@ -501,6 +501,8 @@
         <svg viewBox="0 0 240 300" width="17.6" height="22" aria-hidden="true"><path d="M180 240H60V120H180V240Z" fill="#4B4646"/><path d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" fill="#F1ECEC"/></svg>
         opencode
       </button>
+      <button class="chip kimi-chip sel" onclick="toggleKimi()"
+        title="Route agents through kimi-relay to Kimi K3 on Nebius Token Factory — no agent login needed">Kimi K3 · on</button>
       <span class="agents-note">Pre-installed in every sandbox — your local login and config stay untouched.</span>
     </div>
     <div class="access-grid">
@@ -646,11 +648,12 @@ function selectAgent(btn, name) {
   buildAgent = name;
   document.querySelectorAll('.agent-select .chip').forEach(c => c.classList.toggle('sel', c === btn));
 }
-let kimiOn = sessionStorage.getItem('kimiK3') === '1';
+let kimiOn = sessionStorage.getItem('kimiK3') !== '0';  // on unless explicitly switched off
 function renderKimi() {
-  const b = document.getElementById('kimiToggle');
-  b.classList.toggle('sel', kimiOn);
-  b.textContent = 'Kimi K3 · ' + (kimiOn ? 'on' : 'off');
+  document.querySelectorAll('.kimi-chip').forEach(b => {
+    b.classList.toggle('sel', kimiOn);
+    b.textContent = 'Kimi K3 · ' + (kimiOn ? 'on' : 'off');
+  });
 }
 function toggleKimi() {
   kimiOn = !kimiOn;
