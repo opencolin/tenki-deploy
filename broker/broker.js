@@ -38,6 +38,45 @@ const TTYD_PORT = Number(process.env.TTYD_PORT || 8080);
 // ships in the base image; the terminal launches one of these instead of bash
 const AGENTS = new Set(["claude", "codex", "opencode"]);
 
+/* Dropped into the sandbox as AGENTS.md + CLAUDE.md. Without it agents reach
+ * for GitHub Pages / Vercel / a tunnel and stall on credentials, when the
+ * sandbox they are already inside can serve the public internet. */
+const DEPLOY_GUIDE = `# You are inside a Tenki sandbox
+
+This machine is a disposable Tenki Cloud microVM. It is yours alone, and it
+turns to sand when the session ends.
+
+## Publishing a site or app — use this sandbox, not an external host
+
+Do **not** reach for GitHub Pages, Vercel, Netlify, surge, or a tunnel
+service, and do not ask the user to log in anywhere. This sandbox can serve
+the public internet directly, in two steps:
+
+1. Serve on a port. 3000, 5000, 8000, 8081 and 9000 all work (8080 and 7681
+   are already taken):
+
+       nohup python3 -m http.server 3000 --bind 0.0.0.0 --directory /path/to/app >/tmp/app.log 2>&1 &
+
+   Anything listening on 0.0.0.0 works — \`npm start\`, \`node server.js\`, etc.
+
+2. Publish it and read back the URL:
+
+       tenki sandbox expose --session "$TENKI_SESSION_ID" --port 3000
+
+   It prints a \`preview_url\` — a public HTTPS address. Give that to the user;
+   that is the deployed site.
+
+\`tenki sandbox ports --session "$TENKI_SESSION_ID"\` lists what is already
+published. The CLI is authenticated already — no login, no API key setup.
+
+## Rules
+
+- Only ever act on \`$TENKI_SESSION_ID\`, which is this sandbox. Never
+  terminate, pause, or modify any other sandbox in the workspace — other
+  people's work is running there.
+- The published URL lives as long as this sandbox does.
+`;
+
 async function readJson(req) {
   let raw = "";
   for await (const chunk of req) {
@@ -201,23 +240,34 @@ async function openTerminal(req, res, id) {
     const argv = agent
       ? [agent, fullAuto ? AGENT_FLAGS[agent] : "", prompt ? promptArg : ""].filter(Boolean).join(" ")
       : "bash";
+    // Tenki is the deploy target for whatever the agent builds, so the CLI is
+    // authenticated and self-aware in every session regardless of model choice.
+    const tenkiEnv = [
+      `export TENKI_AUTH_TOKEN='${process.env.TENKI_API_KEY}'`,
+      `export TENKI_SESSION_ID='${id}'`,
+      'export PATH="$HOME/.local/bin:$PATH"',
+      'command -v tenki >/dev/null 2>&1 || curl -fsSL https://tenki.cloud/install.sh | bash >/tmp/tenki-cli-install.log 2>&1',
+    ];
     let launch;
     if (kimi) {
       // kimirelay fronts the agent with Kimi K3 on Nebius — no agent login.
       // kimirelay passes extra args through to the underlying agent.
       launch = [
+        ...tenkiEnv,
         `export NEBIUS_API_KEY='${process.env.NEBIUS_API_KEY}'`,
         ...(process.env.TAVILY_API_KEY ? [`export TAVILY_API_KEY='${process.env.TAVILY_API_KEY}'`] : []),
         'export PATH="$HOME/.kimirelay/bin:$PATH"',
         'command -v kimirelay >/dev/null 2>&1 || { echo "installing kimi-relay…"; curl -fsSL https://kimirelay.com/install.sh | sh >/tmp/kimirelay-install.log 2>&1 || echo "kimi-relay install failed — see /tmp/kimirelay-install.log"; }',
         `exec kimirelay ${argv}`,
       ].join("\n");
-    } else launch = `exec ${argv}`;
+    } else launch = [...tenkiEnv, `exec ${argv}`].join("\n");
     const scriptB64 = Buffer.from(`#!/bin/bash\n${launch}\n`).toString("base64");
     const promptB64 = Buffer.from(prompt).toString("base64");
+    const guideB64 = Buffer.from(DEPLOY_GUIDE).toString("base64");
     const token = crypto.randomBytes(16).toString("base64url");
     const start =
       `echo ${promptB64} | base64 -d > /tmp/prompt.txt; ` +
+      `echo ${guideB64} | base64 -d > /home/tenki/AGENTS.md; cp /home/tenki/AGENTS.md /home/tenki/CLAUDE.md; ` +
       `echo ${scriptB64} | base64 -d > /tmp/launch.sh; chmod +x /tmp/launch.sh; ` +
       `pkill -x ttyd 2>/dev/null; ` +
       `nohup ttyd -p ${TTYD_PORT} -W -b /t-${token} bash /tmp/launch.sh >/tmp/ttyd.log 2>&1 </dev/null & ` +
@@ -249,18 +299,21 @@ async function openTerminal(req, res, id) {
   }
 }
 
-/* Preinstall kimi-relay while the visitor is still reading the page, so a
- * Kimi K3 terminal opens without an install pause. Fire-and-forget. */
+/* Preinstall kimi-relay and the Tenki CLI while the visitor is still reading
+ * the page, so the terminal opens without an install pause. Fire-and-forget. */
 function warmKimi(id) {
-  if (!process.env.NEBIUS_API_KEY) return;
   (async () => {
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 3000));
       const s = await client.get(id);
       if (isTerminal(s.state)) return;
       if (s.state === "RUNNING") {
+        const installs = [
+          "curl -fsSL https://tenki.cloud/install.sh | bash",
+          ...(process.env.NEBIUS_API_KEY ? ["curl -fsSL https://kimirelay.com/install.sh | sh"] : []),
+        ].join("; ");
         await s.exec("bash", {
-          args: ["-lc", "nohup sh -c 'curl -fsSL https://kimirelay.com/install.sh | sh' >/tmp/kimirelay-install.log 2>&1 </dev/null &"],
+          args: ["-lc", `nohup sh -c '${installs}' >/tmp/warmup.log 2>&1 </dev/null &`],
           timeoutMs: 10_000,
         });
         return;
