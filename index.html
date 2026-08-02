@@ -163,7 +163,12 @@
   @media (max-width: 720px) { .hero-products { grid-template-columns: 1fr; } }
 
   /* ---------- Deploy view ---------- */
-  #view-deploy { display: none; max-width: 1000px; margin: 0 auto; padding: 40px 24px 100px; }
+  /* full-bleed like the hero: side padding scales with the viewport instead of
+     pinning the content to a narrow column */
+  #view-deploy {
+    display: none; width: 100%; margin: 0 auto;
+    padding: 40px clamp(24px, 5vw, 96px) 100px;
+  }
   .back {
     background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer;
     display: inline-flex; align-items: center; gap: 6px; padding: 6px 0; margin-bottom: 18px;
