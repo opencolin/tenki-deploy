@@ -189,7 +189,7 @@ async function openTerminal(req, res, id) {
     const AGENT_FLAGS = {
       claude: "--dangerously-skip-permissions",
       codex: "--dangerously-bypass-approvals-and-sandbox",
-      opencode: "",
+      opencode: "--auto",
     };
     const promptArg =
       agent === "opencode" ? '--prompt "$(cat /tmp/prompt.txt)"' : '"$(cat /tmp/prompt.txt)"';
