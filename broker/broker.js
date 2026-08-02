@@ -198,6 +198,7 @@ async function openTerminal(req, res, id) {
           : prompt ? `exec kimirelay ${agent} "$(cat /tmp/prompt.txt)"` : `exec kimirelay ${agent}`;
       launch = [
         `export NEBIUS_API_KEY='${process.env.NEBIUS_API_KEY}'`,
+        ...(process.env.TAVILY_API_KEY ? [`export TAVILY_API_KEY='${process.env.TAVILY_API_KEY}'`] : []),
         'export PATH="$HOME/.kimirelay/bin:$PATH"',
         'command -v kimirelay >/dev/null 2>&1 || { echo "installing kimi-relay…"; curl -fsSL https://kimirelay.com/install.sh | sh >/tmp/kimirelay-install.log 2>&1 || echo "kimi-relay install failed — see /tmp/kimirelay-install.log"; }',
         run,
