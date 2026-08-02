@@ -1,0 +1,27 @@
+broker/broker.js
+  s_97f8cf2a895c6a::t_b656b5bc6f47a8 263-276,279-280,282
+  s_97f8cf2a895c6a::t_404603524a9f3c 335-372
+  s_97f8cf2a895c6a::t_0b411b5c069028 454
+  s_97f8cf2a895c6a::t_7d191512e4bb18 175-181
+  s_97f8cf2a895c6a::t_6a4bd0a29887fe 40-50
+  s_97f8cf2a895c6a::t_1d2f107a9c1cf4 75,77-80
+  s_97f8cf2a895c6a::t_3e32f845edcdec 221-222
+.gitignore
+  s_97f8cf2a895c6a::t_27f94bdd52c360 8-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a28f6dda8a29c19888c5231668ddfec10b22eaa2",
+  "prompts": {},
+  "sessions": {
+    "s_97f8cf2a895c6a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f46e670-3851-4b1c-8791-0dfcf3580094",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "opencolin <colin@lowenberg.com>"
+    }
+  }
+}
