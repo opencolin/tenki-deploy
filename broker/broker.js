@@ -211,10 +211,12 @@ async function openTerminal(req, res, id) {
   // doubles as the terminal-reuse cache key, so every launch-affecting
   // option has to appear in it
   const command = agent
-    ? `${kimi ? "kimi-" : ""}${agent}${fullAuto ? "" : "-manual"}`
+    ? `${kimi ? "kimi-" : ""}${agent}${fullAuto ? "" : "-manual"}${prompt ? "-prompted" : ""}`
     : "bash";
   // reuse the current terminal only for a same-command, promptless request;
-  // a prompt always relaunches so the agent starts with the new prompt
+  // a prompt always relaunches so the agent starts with the new prompt. The
+  // "-prompted" suffix keeps a bare agent launch (the 02 Access pills) from
+  // landing in a terminal still running a prompt typed into 01 Build.
   if (!prompt && entry.terminal && entry.terminal.agent === command &&
       new Date(entry.terminal.expiresAt) > new Date(Date.now() + 60_000))
     return json(res, 200, entry.terminal);
