@@ -35,6 +35,17 @@ const DEMO_DURATION_MS = 60 * 60 * 1000;
 const IDLE_TIMEOUT_MINUTES = 10;
 // must be a platform-allowed preview port; 7681 (ttyd default) is rejected
 const TTYD_PORT = Number(process.env.TTYD_PORT || 8080);
+// ships in the base image; the terminal launches one of these instead of bash
+const AGENTS = new Set(["claude", "codex", "opencode"]);
+
+async function readJson(req) {
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 4096) return {};
+  }
+  try { return JSON.parse(raw); } catch { return {}; }
+}
 
 const client = new TenkiSandbox({ authToken: process.env.TENKI_API_KEY });
 
@@ -148,10 +159,17 @@ async function getDemoSession(res, id) {
   }
 }
 
-async function openTerminal(res, id) {
+async function openTerminal(req, res, id) {
   const entry = tracked[id];
   if (!entry) return json(res, 404, { error: "not_found" });
-  if (entry.terminal && new Date(entry.terminal.expiresAt) > new Date(Date.now() + 60_000))
+  const body = await readJson(req);
+  const agent = AGENTS.has(body.agent) ? body.agent : null;
+  const prompt = typeof body.prompt === "string" ? body.prompt.slice(0, 4000) : "";
+  const command = agent || "bash";
+  // reuse the current terminal only for a same-command, promptless request;
+  // a prompt always relaunches so the agent starts with the new prompt
+  if (!prompt && entry.terminal && entry.terminal.agent === command &&
+      new Date(entry.terminal.expiresAt) > new Date(Date.now() + 60_000))
     return json(res, 200, entry.terminal);
   try {
     const s = await client.get(id);
@@ -159,10 +177,23 @@ async function openTerminal(res, id) {
 
     // Unguessable base path is the terminal's access control (plus the random
     // preview host): ttyd serves only under /t-<token>/, 404s everything else.
+    // One ttyd at a time: starting a new command retires the previous URL.
+    // The prompt and launcher travel base64-encoded — visitor text never
+    // touches shell quoting.
+    const AGENT_LAUNCH = {
+      claude: 'exec claude "$(cat /tmp/prompt.txt)"',
+      codex: 'exec codex "$(cat /tmp/prompt.txt)"',
+      opencode: 'exec opencode --prompt "$(cat /tmp/prompt.txt)"',
+    };
+    const launch = agent && prompt ? AGENT_LAUNCH[agent] : agent ? `exec ${agent}` : "exec bash";
+    const scriptB64 = Buffer.from(`#!/bin/bash\n${launch}\n`).toString("base64");
+    const promptB64 = Buffer.from(prompt).toString("base64");
     const token = crypto.randomBytes(16).toString("base64url");
     const start =
+      `echo ${promptB64} | base64 -d > /tmp/prompt.txt; ` +
+      `echo ${scriptB64} | base64 -d > /tmp/launch.sh; chmod +x /tmp/launch.sh; ` +
       `pkill -x ttyd 2>/dev/null; ` +
-      `nohup ttyd -p ${TTYD_PORT} -W -b /t-${token} bash >/tmp/ttyd.log 2>&1 </dev/null & ` +
+      `nohup ttyd -p ${TTYD_PORT} -W -b /t-${token} bash /tmp/launch.sh >/tmp/ttyd.log 2>&1 </dev/null & ` +
       `sleep 0.4; curl -sf -o /dev/null http://127.0.0.1:${TTYD_PORT}/t-${token}/ && echo OK`;
     const result = await s.exec("bash", { args: ["-lc", start], timeoutMs: 15_000 });
     if (!stdoutText(result).includes("OK")) {
@@ -175,9 +206,10 @@ async function openTerminal(res, id) {
     entry.terminal = {
       url: `${exposed.previewUrl.replace(/\/$/, "")}/t-${token}/`,
       expiresAt: exposed.expiresAt ?? new Date(Date.now() + remainingMs).toISOString(),
+      agent: command,
     };
     saveState();
-    log("terminal_opened", { id });
+    log("terminal_opened", { id, agent: command });
     return json(res, 200, entry.terminal);
   } catch (e) {
     if (e instanceof SessionNotFoundError) {
@@ -188,6 +220,20 @@ async function openTerminal(res, id) {
     log("terminal_failed", { id, message: e.message });
     return json(res, 502, { error: "terminal_failed" });
   }
+}
+
+async function destroyDemoSession(res, id) {
+  if (!tracked[id]) return json(res, 404, { error: "not_found" });
+  try {
+    const s = await client.get(id);
+    await s.closeIfOpen();
+  } catch (e) {
+    if (!(e instanceof SessionNotFoundError)) log("destroy_close_failed", { id, message: e.message });
+  }
+  delete tracked[id];
+  saveState();
+  log("demo_destroyed", { id });
+  return json(res, 200, { ok: true });
 }
 
 /* Reaper: platform maxDuration is the real guarantee; this promptly frees
@@ -232,7 +278,8 @@ http.createServer(async (req, res) => {
     if (seg[0] === "api" && seg[1] === "demo-sessions") {
       if (req.method === "POST" && seg.length === 2) return await createDemoSession(req, res);
       if (req.method === "GET" && seg.length === 3) return await getDemoSession(res, seg[2]);
-      if (req.method === "POST" && seg.length === 4 && seg[3] === "terminal") return await openTerminal(res, seg[2]);
+      if (req.method === "DELETE" && seg.length === 3) return await destroyDemoSession(res, seg[2]);
+      if (req.method === "POST" && seg.length === 4 && seg[3] === "terminal") return await openTerminal(req, res, seg[2]);
       return json(res, 404, { error: "not_found" });
     }
     if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, res);

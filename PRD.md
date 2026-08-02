@@ -2,7 +2,9 @@
 
 **Status:** Phase 1 shipped & e2e-verified 2026-08-01 (broker + Deploy Now + Open Terminal live) · **Owner:** Colin · **Last updated:** 2026-08-01
 
-> Implementation notes: broker lives in `broker/` (Node, `@tenkicloud/sandbox@0.5.4`); ttyd runs on port **8080** inside demo sandboxes — the platform rejects exposing non-standard ports (7681 fails with `invalid_argument`). Frontend falls back to an inline "open it ↗" link when a popup blocker eats the terminal window.
+> Implementation notes: broker lives in `broker/` (Node, `@tenkicloud/sandbox@0.5.4`); ttyd runs on port **8080** inside demo sandboxes — the platform rejects exposing non-standard ports (7681 fails with `invalid_argument`; the base image runs its own ttyd there). Frontend falls back to an inline "open it ↗" link when a popup blocker eats the terminal window.
+>
+> Shipped beyond original P0 scope (2026-08-01): **self-destruct** (DELETE /api/demo-sessions/:id + status-line button), **agent pills wired** (claude/codex/opencode launch in the browser terminal — all three ship in the base image), and **Build wired** (agent selector + prompt → terminal running the chosen agent with that prompt, passed base64 so visitor text never touches shell quoting). P2 item 11 is therefore partially delivered.
 
 ## Problem Statement
 
