@@ -104,6 +104,8 @@
     background: #0a0a0a; color: var(--fg); border: 1px solid var(--line);
   }
   .btn-ghost:hover { border-color: #555; }
+  .btn[disabled] { opacity: .38; cursor: not-allowed; }
+  .btn-ghost[disabled]:hover { border-color: var(--line); }
 
   .hero-top {
     display: flex; flex-direction: column; align-items: center; width: 100%;
@@ -114,16 +116,21 @@
     #view-hero { padding-top: 30px; }
     .hero-top {
       display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(420px, 640px) minmax(0, 0.8fr);
+      /* equal side columns keep the canvas window-centered; tag min prevents
+         tagline wrap; flexible canvas cedes space before either side does */
+      grid-template-columns: minmax(0, 1fr) minmax(420px, 1.6fr) minmax(max-content, 1fr);
       grid-template-areas:
         "title canvas tag"
         "ctas  canvas tag";
       align-items: center;
       column-gap: 44px;
-      width: min(1440px, 96vw);
+      width: min(1440px, 90vw);
       margin: 0 auto;
     }
     .hero-canvas-wrap { grid-area: canvas; width: 100%; }
+    /* draw the animation 20% larger than its column; the art never reaches the
+       canvas edges, so the overhang stays clear of the text columns */
+    #logoCanvas { width: 120%; margin-left: -10%; }
     h1.hero-title {
       grid-area: title; align-self: end; justify-self: start;
       margin: 0 0 10px; text-align: left;
@@ -176,6 +183,22 @@
   }
   .panel h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 6px; }
   .panel .hint { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+
+  /* live demo-sandbox status line */
+  .sbx-status {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-family: "SF Mono", "Menlo", monospace; font-size: 13px; color: var(--muted);
+    margin: -4px 0 20px;
+  }
+  .sbx-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex: none; }
+  .sbx-dot.live { background: #3ecf6a; box-shadow: 0 0 8px rgba(62,207,106,.55); }
+  .sbx-dot.busy { background: #e0b34c; animation: sbxPulse 1.2s ease-in-out infinite; }
+  .sbx-dot.dead { background: #666; }
+  @keyframes sbxPulse { 50% { opacity: .3; } }
+  .sbx-again {
+    background: none; border: none; padding: 0; cursor: pointer;
+    font: inherit; color: var(--fg); text-decoration: underline dotted;
+  }
 
   /* prompt box */
   .prompt-box { border: 1px solid #333; border-radius: 12px; background: #000; }
@@ -398,6 +421,9 @@
     <div class="panel-label">01 · Build</div>
     <h2>Build something new</h2>
     <p class="hint">Describe it. We spin up a sandbox and build it there.</p>
+    <div class="sbx-status" aria-live="polite">
+      <span class="sbx-dot" id="sbxDot"></span><span id="sbxText">sandbox idle</span>
+    </div>
     <div class="prompt-box">
       <div class="prompt-input-row">
         <span class="prompt-glyph">▚</span>
@@ -450,7 +476,7 @@
       <div class="access-card">
         <h3>Terminal in the browser</h3>
         <p>A real shell in the sandbox, streamed to your browser. No setup.</p>
-        <button class="btn btn-ghost">Open Terminal</button>
+        <button class="btn btn-ghost" id="openTerminalBtn" onclick="openTerminal()" disabled>Open Terminal</button>
       </div>
       <div class="access-card">
         <h3>SSH tunnel</h3>
@@ -549,6 +575,7 @@ function showDeploy() {
   deployEl.classList.remove('fade-in'); void deployEl.offsetWidth;
   deployEl.classList.add('fade-in');
   window.scrollTo(0, 0);
+  ensureDemoSession();
 }
 function showHero() {
   deployEl.style.display = 'none';
@@ -582,6 +609,106 @@ function fakeBuild() {
   const b = event.currentTarget;
   b.textContent = 'Spinning up…';
   setTimeout(() => b.textContent = 'Build', 1600);
+}
+
+/* ================= live demo sandbox =================
+   "Deploy now" mints a real (tiny, one-hour) Tenki sandbox through the
+   same-origin broker; "Open Terminal" drops into it via ttyd. */
+const SBX_API = '/api/demo-sessions';
+const sbx = { id: sessionStorage.getItem('sbxId') || null, state: null, timeoutAt: null, timer: null, creating: false };
+const sbxDot = () => document.getElementById('sbxDot');
+const sbxText = () => document.getElementById('sbxText');
+const termBtn = () => document.getElementById('openTerminalBtn');
+
+function sbxStatus(kind, html) {
+  sbxDot().className = 'sbx-dot ' + kind;
+  sbxText().innerHTML = html;
+  termBtn().disabled = kind !== 'live';
+}
+function sbxAgainLink(msg) {
+  sbxStatus('dead', msg + ' <button class="sbx-again" onclick="sbxReset()">deploy another →</button>');
+}
+function sbxReset() {
+  sessionStorage.removeItem('sbxId');
+  sbx.id = null; sbx.state = null;
+  ensureDemoSession();
+}
+function sbxSchedule(ms) { clearTimeout(sbx.timer); sbx.timer = setTimeout(refreshDemoSession, ms); }
+
+function sbxApply(b) {
+  sbx.state = b.state; sbx.timeoutAt = b.timeoutAt;
+  const short = 'sbx-' + (b.id || '').slice(0, 8);
+  if (b.state === 'RUNNING') {
+    const mins = Math.max(1, Math.round((new Date(b.timeoutAt) - Date.now()) / 60000));
+    sbxStatus('live', `running · ${short} · 1 vCPU / 1 GB · turns to sand in ${mins}m`);
+    sbxSchedule(30000);
+  } else if (b.state === 'CREATING' || b.state === 'RESUMING') {
+    sbxStatus('busy', `spinning up ${short}…`);
+    sbxSchedule(2000);
+  } else if (b.state === 'PAUSED' || b.state === 'PAUSING') {
+    sbxAgainLink('sandbox went idle.');
+  } else {
+    sbxAgainLink('this sandbox turned to sand.');
+  }
+}
+
+async function refreshDemoSession() {
+  if (!sbx.id) return false;
+  try {
+    const r = await fetch(`${SBX_API}/${sbx.id}`);
+    if (r.ok) { sbxApply(await r.json()); return true; }
+    sessionStorage.removeItem('sbxId'); sbx.id = null;
+    if (r.status === 410 || r.status === 404) sbxAgainLink('this sandbox turned to sand.');
+    return false;
+  } catch { sbxStatus('dead', 'demo API unreachable'); return true; }
+}
+
+async function ensureDemoSession() {
+  if (sbx.creating) return;
+  if (sbx.id && await refreshDemoSession()) return;
+  sbx.creating = true;
+  sbxStatus('busy', 'requesting a sandbox…');
+  try {
+    const r = await fetch(SBX_API, { method: 'POST' });
+    if (r.ok) {
+      const b = await r.json();
+      sbx.id = b.id; sessionStorage.setItem('sbxId', b.id);
+      sbxApply(b);
+    } else if (r.status === 503) {
+      const b = await r.json().catch(() => ({}));
+      sbxStatus('dead', b.error === 'capacity'
+        ? 'demo at capacity — sandboxes turn to sand within minutes, try again shortly'
+        : 'live demo is switched off right now');
+    } else if (r.status === 429) {
+      sbxStatus('dead', 'that’s a lot of sandboxes — take a breather, try again in a bit');
+    } else {
+      sbxStatus('dead', 'couldn’t create a sandbox — try again shortly');
+    }
+  } catch {
+    sbxStatus('dead', 'demo API unreachable');
+  } finally {
+    sbx.creating = false;
+  }
+}
+
+async function openTerminal() {
+  if (sbx.state !== 'RUNNING' || !sbx.id) return;
+  const btn = termBtn();
+  btn.disabled = true; btn.textContent = 'Opening…';
+  const win = window.open('', '_blank'); // opened inside the click gesture so popup blockers allow it
+  try {
+    const r = await fetch(`${SBX_API}/${sbx.id}/terminal`, { method: 'POST' });
+    if (!r.ok) throw new Error();
+    const { url } = await r.json();
+    if (win) win.location = url;
+    else sbxStatus('live', `terminal ready · <a href="${url}" target="_blank" rel="noopener">open it ↗</a>`);
+  } catch {
+    if (win) win.close();
+    sbxAgainLink('terminal didn’t start.');
+  } finally {
+    btn.textContent = 'Open Terminal';
+    btn.disabled = sbx.state !== 'RUNNING';
+  }
 }
 window.addEventListener('scroll', () =>
   document.getElementById('nav').classList.toggle('scrolled', scrollY > 8));

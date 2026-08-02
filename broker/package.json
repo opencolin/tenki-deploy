@@ -1,0 +1,13 @@
+{
+  "name": "tenki-demo-broker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "broker.js",
+  "scripts": {
+    "start": "node broker.js"
+  },
+  "dependencies": {
+    "@tenkicloud/sandbox": "^0.5.4"
+  }
+}

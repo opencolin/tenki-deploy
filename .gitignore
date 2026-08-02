@@ -2,5 +2,6 @@ node_modules/
 *.png
 shot*.js
 icon-paths.json
-package.json
-package-lock.json
+/package.json
+/package-lock.json
+.env
