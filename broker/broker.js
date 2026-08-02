@@ -167,8 +167,13 @@ async function openTerminal(req, res, id) {
   const agent = AGENTS.has(body.agent) ? body.agent : null;
   const prompt = typeof body.prompt === "string" ? body.prompt.slice(0, 4000) : "";
   const kimi = body.kimi === true && !!agent;
+  const fullAuto = body.fullAuto !== false;
   if (kimi && !process.env.NEBIUS_API_KEY) return json(res, 501, { error: "kimi_unconfigured" });
-  const command = agent ? (kimi ? `kimi-${agent}` : agent) : "bash";
+  // doubles as the terminal-reuse cache key, so every launch-affecting
+  // option has to appear in it
+  const command = agent
+    ? `${kimi ? "kimi-" : ""}${agent}${fullAuto ? "" : "-manual"}`
+    : "bash";
   // reuse the current terminal only for a same-command, promptless request;
   // a prompt always relaunches so the agent starts with the new prompt
   if (!prompt && entry.terminal && entry.terminal.agent === command &&
@@ -194,7 +199,7 @@ async function openTerminal(req, res, id) {
     const promptArg =
       agent === "opencode" ? '--prompt "$(cat /tmp/prompt.txt)"' : '"$(cat /tmp/prompt.txt)"';
     const argv = agent
-      ? [agent, AGENT_FLAGS[agent], prompt ? promptArg : ""].filter(Boolean).join(" ")
+      ? [agent, fullAuto ? AGENT_FLAGS[agent] : "", prompt ? promptArg : ""].filter(Boolean).join(" ")
       : "bash";
     let launch;
     if (kimi) {
