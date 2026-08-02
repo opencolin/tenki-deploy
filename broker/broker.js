@@ -183,29 +183,31 @@ async function openTerminal(req, res, id) {
     // One ttyd at a time: starting a new command retires the previous URL.
     // The prompt and launcher travel base64-encoded — visitor text never
     // touches shell quoting.
-    const AGENT_LAUNCH = {
-      claude: 'exec claude "$(cat /tmp/prompt.txt)"',
-      codex: 'exec codex "$(cat /tmp/prompt.txt)"',
-      opencode: 'exec opencode --prompt "$(cat /tmp/prompt.txt)"',
+    // The VM is disposable and belongs to this one visitor, so skip the
+    // trust/approval gates that assume a shared workstation — otherwise the
+    // first thing a demo shows is a consent dialog.
+    const AGENT_FLAGS = {
+      claude: "--dangerously-skip-permissions",
+      codex: "--dangerously-bypass-approvals-and-sandbox",
+      opencode: "",
     };
+    const promptArg =
+      agent === "opencode" ? '--prompt "$(cat /tmp/prompt.txt)"' : '"$(cat /tmp/prompt.txt)"';
+    const argv = agent
+      ? [agent, AGENT_FLAGS[agent], prompt ? promptArg : ""].filter(Boolean).join(" ")
+      : "bash";
     let launch;
     if (kimi) {
       // kimirelay fronts the agent with Kimi K3 on Nebius — no agent login.
       // kimirelay passes extra args through to the underlying agent.
-      const run =
-        agent === "opencode"
-          ? prompt ? 'exec kimirelay opencode --prompt "$(cat /tmp/prompt.txt)"' : "exec kimirelay opencode"
-          : prompt ? `exec kimirelay ${agent} "$(cat /tmp/prompt.txt)"` : `exec kimirelay ${agent}`;
       launch = [
         `export NEBIUS_API_KEY='${process.env.NEBIUS_API_KEY}'`,
         ...(process.env.TAVILY_API_KEY ? [`export TAVILY_API_KEY='${process.env.TAVILY_API_KEY}'`] : []),
         'export PATH="$HOME/.kimirelay/bin:$PATH"',
         'command -v kimirelay >/dev/null 2>&1 || { echo "installing kimi-relay…"; curl -fsSL https://kimirelay.com/install.sh | sh >/tmp/kimirelay-install.log 2>&1 || echo "kimi-relay install failed — see /tmp/kimirelay-install.log"; }',
-        run,
+        `exec kimirelay ${argv}`,
       ].join("\n");
-    } else if (agent && prompt) launch = AGENT_LAUNCH[agent];
-    else if (agent) launch = `exec ${agent}`;
-    else launch = "exec bash";
+    } else launch = `exec ${argv}`;
     const scriptB64 = Buffer.from(`#!/bin/bash\n${launch}\n`).toString("base64");
     const promptB64 = Buffer.from(prompt).toString("base64");
     const token = crypto.randomBytes(16).toString("base64url");
