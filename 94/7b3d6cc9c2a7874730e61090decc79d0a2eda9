@@ -1,0 +1,34 @@
+broker/broker.js
+  s_97f8cf2a895c6a::t_b785cbf9bbca35 7
+  s_97f8cf2a895c6a::t_ab61229580794c 436-465,475-495,498-507,511-533
+  s_97f8cf2a895c6a::t_341980e2673cc6 61,64
+  s_97f8cf2a895c6a::t_bc7575cf5e95f8 274
+  s_97f8cf2a895c6a::t_af41d37f0bb776 466-474
+  s_97f8cf2a895c6a::t_19613743c350ee 508-510
+  s_97f8cf2a895c6a::t_50bc4021c5874f 586
+  s_97f8cf2a895c6a::t_346cd3ca1afe02 223-225,228-230,233
+  s_97f8cf2a895c6a::t_1745f106b04144 137,141-152
+  s_97f8cf2a895c6a::t_63539b2fb35c03 345-354
+  s_97f8cf2a895c6a::t_50063f7625e61d 620
+  s_97f8cf2a895c6a::t_a8aacaa4fdee35 567
+  s_97f8cf2a895c6a::t_4f3f3e652eb9e7 53-60,62-63,65-84
+  s_97f8cf2a895c6a::t_72a4bc7a450db1 496-497
+  s_97f8cf2a895c6a::t_93f3869df7b823 281-283
+  s_97f8cf2a895c6a::t_19a1163bd14060 153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "947b3d6cc9c2a7874730e61090decc79d0a2eda9",
+  "prompts": {},
+  "sessions": {
+    "s_97f8cf2a895c6a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f46e670-3851-4b1c-8791-0dfcf3580094",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "opencolin <colin@lowenberg.com>"
+    }
+  }
+}
