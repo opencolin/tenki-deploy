@@ -1,4 +1,4 @@
-# tenki-redesign
+# tenki-deploy
 
 Vercel-style redesign prototype for [tenki.cloud](https://tenki.cloud) — Agent Native Infrastructure.
 
