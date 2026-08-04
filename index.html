@@ -628,6 +628,7 @@ function showDeploy() {
   deployEl.classList.remove('fade-in'); void deployEl.offsetWidth;
   deployEl.classList.add('fade-in');
   window.scrollTo(0, 0);
+  if (location.hash !== '#deploy') history.replaceState(null, '', '#deploy');
   ensureDemoSession();
 }
 function showHero() {
@@ -636,7 +637,10 @@ function showHero() {
   heroEl.classList.remove('fade-in'); void heroEl.offsetWidth;
   heroEl.classList.add('fade-in');
   window.scrollTo(0, 0);
+  if (location.hash) history.replaceState(null, '', location.pathname);
 }
+// deep link: ixio.com's "Deploy now" points straight at .../#deploy
+if (location.hash === '#deploy') showDeploy();
 function growPrompt() {
   const i = document.getElementById('promptInput');
   // size to exact content; when empty, size to the placeholder so it never clips
