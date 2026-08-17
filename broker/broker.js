@@ -44,6 +44,22 @@ const AGENTS = new Set(["claude", "codex", "opencode"]);
 // Verified working unauthenticated: big-pickle, deepseek-v4-flash-free,
 // hy3-free, mimo-v2.5-free, nemotron-3-ultra-free (north-mini-code-free errors).
 const OPENCODE_MODEL = process.env.OPENCODE_MODEL || "opencode/nemotron-3-ultra-free";
+// claude and codex have no free tier of their own, so they run through
+// kimi-relay (which translates their native wire formats) pointed at this
+// broker's relay. LLM_PROVIDER picks what the relay forwards to: "openrouter"
+// for its $0 ":free" tier, or "nebius" for paid Kimi K3 with no request caps.
+// Must be a tool-calling model — an agent harness is useless without it.
+// Per agent, because they don't tolerate the same upstream: claude runs fine on
+// OpenRouter's $0 ":free" tier, but codex parses the model catalogue kimi-relay
+// derives from the upstream and dies on OpenRouter's "video" modality
+// (`unknown variant 'video', expected 'text' or 'image'`) — verified working on
+// nebius, so it stays there until that is fixed upstream in kimi-relay.
+const PROVIDER_FOR = {
+  claude: process.env.LLM_PROVIDER_CLAUDE || process.env.LLM_PROVIDER || "openrouter",
+  codex: process.env.LLM_PROVIDER_CODEX || process.env.LLM_PROVIDER || "nebius",
+};
+const OPENROUTER_MODEL =
+  process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-ultra-550b-a55b:free";
 // Public URL of THIS broker/site, so a sandbox can call back to publish a port.
 // Required for the deploy feature; without it, `tenki-publish` is unavailable.
 const BROKER_PUBLIC_URL = (process.env.BROKER_PUBLIC_URL || "").replace(/\/$/, "");
@@ -67,6 +83,14 @@ const UPSTREAM = {
   nebius: { origin: process.env.NEBIUS_UPSTREAM_ORIGIN || "https://api.tokenfactory.nebius.com", strip: "v1",
             allow: new Set(["chat/completions", "models"]),
             key: () => process.env.NEBIUS_API_KEY },
+  // OpenRouter's ":free" models cost nothing but still require a key, so they
+  // ride the same relay. kimi-relay speaks OpenAI-compatible /chat/completions
+  // and OpenRouter serves the same shape, so only the model id has to be
+  // rewritten in flight (kimi-relay sends Nebius names).
+  openrouter: { origin: process.env.OPENROUTER_UPSTREAM_ORIGIN || "https://openrouter.ai/api", strip: "v1",
+                allow: new Set(["chat/completions", "models"]),
+                key: () => process.env.OPENROUTER_API_KEY,
+                forceModel: () => OPENROUTER_MODEL },
   tavily: { origin: process.env.TAVILY_UPSTREAM_ORIGIN || "https://api.tavily.com", strip: null,
             allow: new Set(["search"]),
             key: () => process.env.TAVILY_API_KEY },
@@ -285,7 +309,8 @@ async function openTerminal(req, res, id) {
   // never needs a Nebius key); the Kimi toggle only governs claude and codex.
   const kimi = body.kimi === true && !!agent && agent !== "opencode";
   const fullAuto = body.fullAuto !== false;
-  if (kimi && !process.env.NEBIUS_API_KEY) return json(res, 501, { error: "kimi_unconfigured" });
+  const llmProvider = PROVIDER_FOR[agent] || "nebius";
+  if (kimi && !UPSTREAM[llmProvider]?.key()) return json(res, 501, { error: "kimi_unconfigured" });
   // Fail loudly at create time: without an https relay URL the VM would get a
   // token and nowhere valid to send it (kimi routes through the broker relay).
   if (kimi && !/^https:\/\//.test(BROKER_PUBLIC_URL)) return json(res, 501, { error: "relay_unconfigured" });
@@ -357,7 +382,7 @@ async function openTerminal(req, res, id) {
         // NEBIUS_BASE_URL/TAVILY_BASE_URL (where to send it); we point both at
         // the broker's /relay proxy, which injects the real key server-side.
         `export NEBIUS_API_KEY='${entry.relayToken}'`,
-        `export NEBIUS_BASE_URL='${BROKER_PUBLIC_URL}/relay/nebius/v1'`,
+        `export NEBIUS_BASE_URL='${BROKER_PUBLIC_URL}/relay/${llmProvider}/v1'`,
         ...(process.env.TAVILY_API_KEY
           ? [`export TAVILY_API_KEY='${entry.relayToken}'`,
              `export TAVILY_BASE_URL='${BROKER_PUBLIC_URL}/relay/tavily'`]
@@ -487,10 +512,14 @@ async function relay(req, res, seg, search) {
 
   // Spend guard for Nebius chat/completions: optional model allow-list +
   // max_tokens clamp (a root visitor can curl the relay directly with any body).
-  if (seg[1] === "nebius" && rest === "chat/completions" && bodyBuf.length) {
+  if (rest === "chat/completions" && bodyBuf.length) {
     try {
       const p = JSON.parse(bodyBuf.toString("utf8"));
-      if (RELAY_MODELS.size && p.model && !RELAY_MODELS.has(p.model)) return json(res, 403, { error: "model_not_allowed" });
+      // kimi-relay addresses models by the upstream it thinks it is talking to,
+      // so pin the id when this upstream serves a different catalogue.
+      if (up.forceModel) p.model = up.forceModel();
+      else if (RELAY_MODELS.size && p.model && !RELAY_MODELS.has(p.model))
+        return json(res, 403, { error: "model_not_allowed" });
       if (typeof p.max_tokens !== "number" || p.max_tokens > MAX_OUTPUT_TOKENS) p.max_tokens = MAX_OUTPUT_TOKENS;
       bodyBuf = Buffer.from(JSON.stringify(p));
     } catch { /* not JSON — forward unchanged */ }
@@ -502,8 +531,11 @@ async function relay(req, res, seg, search) {
   headers["authorization"] = `Bearer ${up.key()}`;
   headers["accept-encoding"] = "identity";              // never gzip an SSE stream
   headers["content-length"] = String(bodyBuf.length);
-  const upstreamPath = "/" + (up.strip ? up.strip + "/" : "") + rest + (search || "");
   const u = new URL(up.origin);
+  // Keep any path prefix on the origin (OpenRouter lives under /api); only the
+  // host and port come from `u` otherwise, so dropping it silently 404s.
+  const basePath = u.pathname.replace(/\/+$/, "");
+  const upstreamPath = basePath + "/" + (up.strip ? up.strip + "/" : "") + rest + (search || "");
   const mod = u.protocol === "http:" ? http : https;
 
   entry.relayCalls = (entry.relayCalls || 0) + 1;
@@ -524,6 +556,31 @@ async function relay(req, res, seg, search) {
       for (const [k, v] of Object.entries(ures.headers)) if (!HOP.has(k.toLowerCase())) out[k] = v;
       out["cache-control"] = "no-cache, no-transform";
       out["x-accel-buffering"] = "no";                  // ask any ingress not to buffer
+
+      // When the model is pinned, the catalogue is the only response worth
+      // rewriting: codex parses it and rejects modalities it doesn't know
+      // (OpenRouter advertises "video"), so serve just the model we actually
+      // use. Small, non-streaming, safe to buffer — everything else pipes.
+      if (up.forceModel && rest === "models" && (ures.statusCode || 0) < 400) {
+        const chunks = [];
+        ures.on("data", (c) => chunks.push(c));
+        ures.on("error", () => { res.destroy(); done(); });
+        ures.on("end", () => {
+          let body = Buffer.concat(chunks);
+          try {
+            const cat = JSON.parse(body.toString("utf8"));
+            const want = up.forceModel();
+            const keep = (cat.data || []).filter((m) => m.id === want);
+            if (keep.length) body = Buffer.from(JSON.stringify({ ...cat, data: keep }));
+          } catch { /* not JSON — pass through untouched */ }
+          delete out["content-length"];
+          res.writeHead(ures.statusCode || 502, { ...out, "content-length": body.length });
+          res.end(body);
+          done();
+        });
+        return;
+      }
+
       res.writeHead(ures.statusCode || 502, out);
       res.flushHeaders?.();
       res.socket?.setNoDelay(true); ures.socket?.setNoDelay(true);
