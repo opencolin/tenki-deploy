@@ -38,6 +38,12 @@ const IDLE_TIMEOUT_MINUTES = 10;
 const TTYD_PORT = Number(process.env.TTYD_PORT || 8080);
 // ships in the base image; the terminal launches one of these instead of bash
 const AGENTS = new Set(["claude", "codex", "opencode"]);
+// opencode serves several models free and unauthenticated, so the default agent
+// needs no key of ours at all — nothing to leak, nothing to meter. claude and
+// codex have no free tier, so those two route through the Kimi relay instead.
+// Verified working unauthenticated: big-pickle, deepseek-v4-flash-free,
+// hy3-free, mimo-v2.5-free, nemotron-3-ultra-free (north-mini-code-free errors).
+const OPENCODE_MODEL = process.env.OPENCODE_MODEL || "opencode/nemotron-3-ultra-free";
 // Public URL of THIS broker/site, so a sandbox can call back to publish a port.
 // Required for the deploy feature; without it, `tenki-publish` is unavailable.
 const BROKER_PUBLIC_URL = (process.env.BROKER_PUBLIC_URL || "").replace(/\/$/, "");
@@ -275,7 +281,9 @@ async function openTerminal(req, res, id) {
   const body = await readJson(req);
   const agent = AGENTS.has(body.agent) ? body.agent : null;
   const prompt = typeof body.prompt === "string" ? body.prompt.slice(0, 4000) : "";
-  const kimi = body.kimi === true && !!agent;
+  // opencode runs on its own free models, so it never touches the relay (and so
+  // never needs a Nebius key); the Kimi toggle only governs claude and codex.
+  const kimi = body.kimi === true && !!agent && agent !== "opencode";
   const fullAuto = body.fullAuto !== false;
   if (kimi && !process.env.NEBIUS_API_KEY) return json(res, 501, { error: "kimi_unconfigured" });
   // Fail loudly at create time: without an https relay URL the VM would get a
@@ -312,8 +320,10 @@ async function openTerminal(req, res, id) {
     };
     const promptArg =
       agent === "opencode" ? '--prompt "$(cat /tmp/prompt.txt)"' : '"$(cat /tmp/prompt.txt)"';
+    const modelArg = agent === "opencode" ? `--model ${OPENCODE_MODEL}` : "";
     const argv = agent
-      ? [agent, fullAuto ? AGENT_FLAGS[agent] : "", prompt ? promptArg : ""].filter(Boolean).join(" ")
+      ? [agent, fullAuto ? AGENT_FLAGS[agent] : "", modelArg, prompt ? promptArg : ""]
+          .filter(Boolean).join(" ")
       : "bash";
     // Deploy path: the sandbox publishes its OWN ports by calling back to the
     // broker with a per-session token. The workspace key (TENKI_API_KEY) stays
