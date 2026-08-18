@@ -178,6 +178,24 @@ grid of 24 live terminals is the marketing asset.
 5. **[product]** Deadline default (30 min?) and whether visitors can watch
    both teams or only one until the reveal.
 
+## The real ceiling is preview URLs, not VMs (discovered 2026-08-18)
+
+The binding limit for a watchable run is **`preview_urls_per_workspace`**, which
+the usage API reports as **20**. The API exposes **no VM/session-count limit at
+all** (only `storage`, `max_concurrent_jobs` = a runners metric, and
+`preview_urls_per_workspace`). Every seat that's watchable exposes one preview
+URL (its ttyd viewer), so:
+
+- **A 24-seat run needs 24 preview URLs and cannot fit under the 20 cap** — the
+  VM-count upgrade doesn't help. The two-team × 12 vision needs either a
+  preview-URL limit increase, or a design where seats *don't* each hold a
+  preview URL (stream their logs through the broker instead of one ttyd per
+  seat, exposing viewers only on demand).
+- The capacity guard now reads `preview_urls_per_workspace` (the limit that
+  actually exists) minus `MAXX_RESERVED_PREVIEWS` headroom, and 503s with the
+  real numbers. The earlier `active_sessions` check was a phantom — that key
+  isn't returned, so it silently defaulted to 5.
+
 ## P0 build notes (shipped 2026-08-18)
 
 Broker orchestrator in `broker/maxx.js` (factory handed the broker's client +

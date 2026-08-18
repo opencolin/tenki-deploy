@@ -51,12 +51,17 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
       catch { return null; }
     }).filter(Boolean);
 
-  // Distinct native-free models across seats; 'strongest' hint gets the top one.
+  // Distinct native-free models across seats. Seat 0 is the lead/architect —
+  // the seat that decomposes the work and (in P0) publishes — so it always gets
+  // the single strongest model, whatever the template says. Other 'strongest'
+  // hints also get the top model; everyone else round-robins the rest.
   function assignModels(seats) {
     const [strong, ...rest] = NATIVE_FREE;
     let i = 0;
-    return seats.map((s) =>
-      s.model ? s.model : s.modelHint === "strongest" ? strong : rest[i++ % rest.length]);
+    return seats.map((s, idx) =>
+      s.model ? s.model
+      : idx === 0 || s.modelHint === "strongest" ? strong
+      : rest[i++ % rest.length]);
   }
 
   const token = () => crypto.randomBytes(24).toString("base64url");
@@ -134,6 +139,9 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
   async function launchRun(run) {
     try {
       for (let k = 0; k < run.seats.length; k++) {
+        // Provisioning is staggered and async; a DELETE mid-launch must stop it
+        // creating the rest of the roster (else it races past the teardown).
+        if (run.aborted) { log("maxx_launch_aborted", { runId: run.id, at: k }); return; }
         try { await launchSeat(run, run.seats[k], k === 0); }
         catch (e) {
           run.seats[k].state = "failed"; run.seats[k].error = e.message; save();
@@ -141,8 +149,7 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
         }
         if (k < run.seats.length - 1) await new Promise((r) => setTimeout(r, SEAT_STAGGER_MS));
       }
-      run.state = "running"; save();
-      log("maxx_launched", { runId: run.id, seats: run.seats.length });
+      if (!run.aborted) { run.state = "running"; save(); log("maxx_launched", { runId: run.id, seats: run.seats.length }); }
     } catch (e) {
       run.state = "failed"; run.error = e.message; save();
       log("maxx_launch_failed", { runId: run.id, message: e.message });
@@ -162,12 +169,23 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     const template = loadTemplate(body.team || "lean-four");
     if (!template) return json(res, 400, { error: "unknown_team", have: listTemplates().map((t) => t.name) });
 
-    const active = Object.keys(tracked).length;
-    let max = 5;
-    try { const u = (await client.getUsage()).find((x) => x.key === "active_sessions"); if (u?.max) max = u.max; } catch {}
-    const free = max - active;
-    if (template.seats.length > free)
-      return json(res, 503, { error: "capacity", need: template.seats.length, free });
+    // The binding limit is preview URLs, not VMs: every watchable seat exposes
+    // one (its ttyd viewer). The usage API reports this — there is NO
+    // active-sessions/VM key — so it's the ceiling we can actually read. Leave
+    // headroom (RESERVED) for the host site + any live demo sessions.
+    const RESERVED = Number(process.env.MAXX_RESERVED_PREVIEWS || 3);
+    let previewMax = 20, previewUsed = 0;
+    try {
+      const u = (await client.getUsage()).find((x) => x.key === "preview_urls_per_workspace");
+      if (u) { previewMax = u.max ?? previewMax; previewUsed = u.current ?? 0; }
+    } catch {}
+    const freePreviews = previewMax - previewUsed - RESERVED;
+    if (template.seats.length > freePreviews)
+      return json(res, 503, {
+        error: "capacity", need: template.seats.length,
+        freePreviews, previewMax, previewUsed,
+        note: "limited by preview_urls_per_workspace, not VM count",
+      });
 
     const models = assignModels(template.seats);
     const runId = crypto.randomBytes(6).toString("hex");
@@ -191,6 +209,7 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
   async function stop(res, runId) {
     const r = runs[runId];
     if (!r) return json(res, 404, { error: "not_found" });
+    r.aborted = true; save();      // halt an in-flight launchRun before closing seats
     for (const s of r.seats) {
       if (!s.id) continue;
       try { const sess = await client.get(s.id); await sess.closeIfOpen(); } catch {}
