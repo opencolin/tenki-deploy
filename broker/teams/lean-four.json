@@ -1,0 +1,27 @@
+{
+  "name": "lean-four",
+  "description": "P0 dry-run team: four seats, all on keyless opencode-native free models — fits the current 5-slot plan.",
+  "seats": [
+    {
+      "role": "architect",
+      "pool": "native-free",
+      "modelHint": "strongest",
+      "duty": "You are the architect and team lead. Build the requested application as a single self-contained page under /home/tenki/work, make it genuinely good, and get it live. Keep it simple enough to finish."
+    },
+    {
+      "role": "engineer",
+      "pool": "native-free",
+      "duty": "You are the core engineer. Pull the team repo, read tasks.md, claim the engineering task by committing a note under your name, implement it, and push working code. Prefer small commits that always leave the repo runnable."
+    },
+    {
+      "role": "designer",
+      "pool": "native-free",
+      "duty": "You are the designer. Pull the team repo, read tasks.md, claim the design task, and make the app look genuinely good — layout, spacing, color, states. Push your work as you go so the architect can integrate early."
+    },
+    {
+      "role": "qa-engineer",
+      "pool": "native-free",
+      "duty": "You are the QA engineer. Pull the team repo, read tasks.md and its acceptance criteria, and test what your teammates push. File findings as FIXME notes in a QA.md and fix small bugs yourself directly. Your goal is that what the architect publishes actually works."
+    }
+  ]
+}

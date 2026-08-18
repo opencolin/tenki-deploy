@@ -17,6 +17,7 @@ import {
   isTerminal,
   stdoutText,
 } from "@tenkicloud/sandbox";
+import { createMaxx } from "./maxx.js";
 
 const BROKER_DIR = path.dirname(new URL(import.meta.url).pathname);
 // .env: KEY=VALUE lines; kept out of the static tree so it can never be served
@@ -454,6 +455,7 @@ async function exposePort(req, res, id) {
     entry.exposeCount = (entry.exposeCount || 0) + 1;
     saveState();
     log("port_exposed", { id, port });
+    if (entry.maxx) maxx.notifyExpose(id, port, exposed.previewUrl);  // record run deliverable
     return json(res, 200, {
       url: exposed.previewUrl,
       expiresAt: exposed.expiresAt ?? new Date(Date.now() + remainingMs).toISOString(),
@@ -672,6 +674,14 @@ function serveStatic(req, res) {
   });
 }
 
+// Sandboxmaxxing orchestrator — handed the broker primitives it reuses so it
+// can create sandboxes, keep them in `tracked` (expose + reaper still see
+// them), and answer over the same HTTP server.
+const maxx = createMaxx({
+  client, tracked, saveState, indexRelay, log, json, readJson,
+  brokerUrl: BROKER_PUBLIC_URL,
+});
+
 http.createServer(async (req, res) => {
   try {
     const { pathname } = new URL(req.url, "http://x");
@@ -682,6 +692,13 @@ http.createServer(async (req, res) => {
       if (req.method === "DELETE" && seg.length === 3) return await destroyDemoSession(res, seg[2]);
       if (req.method === "POST" && seg.length === 4 && seg[3] === "terminal") return await openTerminal(req, res, seg[2]);
       if (req.method === "POST" && seg.length === 4 && seg[3] === "expose") return await exposePort(req, res, seg[2]);
+      return json(res, 404, { error: "not_found" });
+    }
+    if (seg[0] === "api" && seg[1] === "maxx") {
+      if (req.method === "POST" && seg.length === 2) return await maxx.start(req, res);
+      if (req.method === "GET" && seg.length === 2) return maxx.templates(res);
+      if (req.method === "GET" && seg.length === 3) return await maxx.get(res, seg[2]);
+      if (req.method === "DELETE" && seg.length === 3) return await maxx.stop(res, seg[2]);
       return json(res, 404, { error: "not_found" });
     }
     if (seg[0] === "relay") return await relay(req, res, seg, new URL(req.url, "http://x").search);

@@ -1,0 +1,30 @@
+{
+  "name": "openengineer-classic",
+  "description": "The colygon/openengineer roster: 12 roles, one per AI lab. Default template for full 24-slot competitive runs (P1).",
+  "seats": [
+    { "role": "architect", "pool": "native-free", "modelHint": "strongest",
+      "duty": "Main orchestrator. Decompose the prompt into tasks.md with one task per teammate and clear acceptance criteria; push it first, then arbitrate scope questions and keep the team unblocked." },
+    { "role": "engineer", "pool": "openrouter-free", "modelHint": "strongest",
+      "duty": "Autonomous deep worker. Own the core implementation; keep the repo runnable with every push." },
+    { "role": "strategist", "pool": "openrouter-free",
+      "duty": "Deep reasoning. Take the hardest sub-problem the architect hands off and deliver a working solution with your reasoning documented." },
+    { "role": "librarian", "pool": "openrouter-free",
+      "duty": "OSS code & docs search. Find the right libraries and reference implementations; record choices and links in CITATIONS.md." },
+    { "role": "researcher", "pool": "native-free",
+      "duty": "Broad knowledge synthesis. Turn the prompt into concrete requirements and acceptance criteria in REQUIREMENTS.md before implementation hardens." },
+    { "role": "analyst", "pool": "native-free",
+      "duty": "Fast codebase exploration. Continuously review teammates' pushes; file concise issues in ISSUES.md and flag integration breaks early." },
+    { "role": "designer", "pool": "openrouter-free",
+      "duty": "Visual/UI. Own layout, styling, and interaction polish; push early so integration sees real markup." },
+    { "role": "product-manager", "pool": "native-free",
+      "duty": "Strategic planning. Watch the clock; cut scope in tasks.md when the deadline demands it and make sure something shippable exists at all times." },
+    { "role": "consultant", "pool": "openrouter-free",
+      "duty": "Architecture advisor. Advise the architect in ADVICE.md; you do not commit application code." },
+    { "role": "qa-engineer", "pool": "openrouter-free",
+      "duty": "Plan reviewer and tester. Test against acceptance criteria; record findings in QA.md and fix small defects directly." },
+    { "role": "technical-lead", "pool": "native-free", "modelHint": "strongest",
+      "duty": "Plan executor. Merge and integrate the team's work, resolve conflicts, serve the final app on port 3000 bound to 0.0.0.0, publish with `tenki-publish 3000`, and print the URL." },
+    { "role": "junior-architect", "pool": "openrouter-free",
+      "duty": "Lighter coding tasks. Pick up small tasks, write the README, and keep the repo tidy." }
+  ]
+}

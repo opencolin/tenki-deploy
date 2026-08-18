@@ -13,9 +13,41 @@ Distinct from **benchmark mode** (specced separately): benchmark mode fans one
 prompt across harness×model combos to *compare* them; sandboxmaxxing composes
 models into *teams* that cooperate internally and compete externally.
 
-## Teams
+## Teams are config, not code
 
-Rosters come from [openengineer](https://github.com/colygon/openengineer)
+Team composition is a **template file** in `broker/teams/*.json`, versioned in
+the repo — trying a different org chart is editing a file, never touching the
+broker. A run names its templates (`teamA`/`teamB`, defaulting to
+`openengineer-classic` mirror-match), and templates need not be 12 seats or
+symmetric: "12 juniors vs 4 seniors" is a legal matchup, bounded only by
+`teamA.seats + teamB.seats ≤ free slots`. One-off experiments can pass an
+inline roster in the POST body without saving a file.
+
+```jsonc
+// broker/teams/<name>.json
+{
+  "name": "openengineer-classic",
+  "description": "12 roles, one per AI lab — colygon/openengineer",
+  "seats": [
+    { "role": "architect",  "duty": "Decompose the prompt into tasks.md; assign; arbitrate.",
+      "pool": "native-free", "modelHint": "strongest" },
+    { "role": "engineer",   "duty": "Core implementation.", "pool": "openrouter-free" }
+    // …one entry per seat; "pool" picks the model source per mode
+    // (native-free | openrouter-free | frontier), or "model" pins one exactly.
+  ]
+}
+```
+
+The broker assigns concrete models at launch: it walks each team's seats,
+draws distinct models from the seat's pool for the active mode (Team B drawing
+after Team A so lineups differ), honors explicit `model` pins, and applies
+`modelHint: "strongest"` seats first. The per-seat `duty` text becomes that
+sandbox's role file, so a template fully defines both *who is on the team* and
+*what each seat is told to do*.
+
+### Default template: `openengineer-classic`
+
+From [openengineer](https://github.com/colygon/openengineer)
 (12 roles, one per AI lab). Same 12 roles per team:
 
 | Seat | Role (openengineer) | Duty in the run |
@@ -146,11 +178,39 @@ grid of 24 live terminals is the marketing asset.
 5. **[product]** Deadline default (30 min?) and whether visitors can watch
    both teams or only one until the reveal.
 
+## P0 build notes (shipped 2026-08-18)
+
+Broker orchestrator in `broker/maxx.js` (factory handed the broker's client +
+tracked map + helpers), routes `POST/GET/DELETE /api/maxx` + `GET /api/maxx`
+(list templates). Teams are `broker/teams/*.json`. Verified live:
+
+- **Machinery works end to end:** a run loads a template, assigns distinct
+  native-free models (strongest → `modelHint` seats), creates sandboxes tagged
+  `maxx=<runId>`, launches each seat's opencode agent under a live ttyd viewer,
+  and returns per-seat terminal URLs. Capacity guard 503s when seats > free
+  slots. `notifyExpose` records the architect's published URL as the run's
+  deliverable. `DELETE` tears the whole run down.
+- **25-slot upgrade confirmed** (a 4-seat launch cleared the capacity guard).
+- **Known reality — free-model completion is variable.** In one-shot
+  `opencode run` mode a tiny free model sometimes does the minimal thing (write
+  one file and stop) rather than the full serve+publish, and occasionally
+  ignores `cd`/path instructions. The same model/flags completed a full
+  build+publish in earlier tests, so it's variance, not breakage. Mitigations
+  for P0.5: put the architect (the seat that must publish) on a stronger model
+  or interactive mode; make the publish step a broker-driven phase rather than
+  trusting the agent to reach it.
+
+Not yet built (next increments): the **frontend team grid**, real
+**cross-sandbox coordination** (the git-http-backend CGI transport is verified
+working on loopback but not wired — a broker-hosted blackboard is the more
+robust alternative), and **two-team competition + judge** (P1).
+
 ## Phasing
 
-- **P0 — one team of 12, no competition:** proves coordination (shared repo,
-  tasks.md, publish). Fits the *current* 5-slot plan at 4 seats for a dry run
-  of the machinery.
+- **P0 — one team, no competition:** proves coordination (shared repo,
+  tasks.md, publish) using the `lean-four` template — 4 seats, all on
+  opencode-native free models (no keys, no rate caps, no relay), which fits
+  the *current* 5-slot plan. Same machinery the 24-seat runs will use.
 - **P1 — two teams + judge + scoreboard** after the plan upgrade.
 - **P2 — spectacle polish:** shareable replay, per-seat token/cost meters,
   frontier mode.

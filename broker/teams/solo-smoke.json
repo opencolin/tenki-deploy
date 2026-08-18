@@ -1,0 +1,12 @@
+{
+  "name": "solo-smoke",
+  "description": "One-seat smoke test of the sandboxmaxxing machinery — fits a single free slot.",
+  "seats": [
+    {
+      "role": "architect",
+      "pool": "native-free",
+      "modelHint": "strongest",
+      "duty": "You are a solo engineer. Build the requested thing as one self-contained index.html under /home/tenki/work. Keep it small and finish it."
+    }
+  ]
+}
