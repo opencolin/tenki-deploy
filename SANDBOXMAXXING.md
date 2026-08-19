@@ -180,21 +180,24 @@ grid of 24 live terminals is the marketing asset.
 
 ## The real ceiling is preview URLs, not VMs (discovered 2026-08-18)
 
-The binding limit for a watchable run is **`preview_urls_per_workspace`**, which
-the usage API reports as **20**. The API exposes **no VM/session-count limit at
-all** (only `storage`, `max_concurrent_jobs` = a runners metric, and
-`preview_urls_per_workspace`). Every seat that's watchable exposes one preview
-URL (its ttyd viewer), so:
+`client.getUsage()` (`@tenkicloud/sandbox`) reports three limits. The
+VM/session cap is **`max_concurrent_jobs`** — confusingly named, but its label
+is "Active sessions" and its helpText is "Active sessions hold live VM
+resources" — at **100** (plenty). The binding limit for a *watchable* run is
+the other one: **`preview_urls_per_workspace` = 20**. Every watchable seat
+exposes one preview URL (its ttyd viewer), so:
 
 - **A 24-seat run needs 24 preview URLs and cannot fit under the 20 cap** — the
   VM-count upgrade doesn't help. The two-team × 12 vision needs either a
   preview-URL limit increase, or a design where seats *don't* each hold a
   preview URL (stream their logs through the broker instead of one ttyd per
   seat, exposing viewers only on demand).
-- The capacity guard now reads `preview_urls_per_workspace` (the limit that
-  actually exists) minus `MAXX_RESERVED_PREVIEWS` headroom, and 503s with the
-  real numbers. The earlier `active_sessions` check was a phantom — that key
-  isn't returned, so it silently defaulted to 5.
+- The capacity guard now reads `preview_urls_per_workspace` (the binding
+  limit) minus `MAXX_RESERVED_PREVIEWS` headroom, and 503s with the real
+  numbers. The earlier code looked for a key named `active_sessions` — the
+  SDK docstring's name, but only the *label*; the actual key is
+  `max_concurrent_jobs` — so the `.find()` missed it and silently defaulted
+  to 5. The VM cap itself (100) is not the constraint; preview URLs (20) are.
 
 ## P0 build notes (shipped 2026-08-18)
 

@@ -170,9 +170,10 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     if (!template) return json(res, 400, { error: "unknown_team", have: listTemplates().map((t) => t.name) });
 
     // The binding limit is preview URLs, not VMs: every watchable seat exposes
-    // one (its ttyd viewer). The usage API reports this — there is NO
-    // active-sessions/VM key — so it's the ceiling we can actually read. Leave
-    // headroom (RESERVED) for the host site + any live demo sessions.
+    // one (its ttyd viewer). getUsage() reports the VM cap under
+    // `max_concurrent_jobs` (=100, plenty) and this under
+    // `preview_urls_per_workspace` (=20) — the real ceiling. Leave headroom
+    // (RESERVED) for the host site + any live demo sessions.
     const RESERVED = Number(process.env.MAXX_RESERVED_PREVIEWS || 3);
     let previewMax = 20, previewUsed = 0;
     try {
