@@ -7,3 +7,6 @@ icon-paths.json
 .env
 broker/state.json
 broker/.env
+
+# design canvas payload (2MB, machine-generated)
+design-maxx/sandboxmaxxing-ui.html

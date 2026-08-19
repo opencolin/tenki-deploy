@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; }
+    a { color: #d9c9a3; } a:hover { color: #ede1c4; }
+    .rmark { display: grid; grid-template-columns: repeat(3, 6px); gap: 2px; }
+    .rmark i { width: 6px; height: 6px; background: #ededed; border-radius: 1.5px; display: block; }
+    .rmark i.s { background: #d9c9a3; } .rmark i.g { background: transparent; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: block; }
+    .dot.live { background: #3ecf6a; box-shadow: 0 0 7px rgba(62,207,106,.6); }
+    .dot.busy { background: #e0b34c; animation: pulse 1.2s ease-in-out infinite; }
+    .dot.done { background: #d9c9a3; }
+    .dot.pending { background: #555; }
+    @keyframes pulse { 50% { opacity: .28; } }
+    .bar { height: 3px; border-radius: 2px; background: #1c1c1c; overflow: hidden; }
+    .bar > i { display: block; height: 100%; border-radius: 2px; }
+    .seat { border: 1px solid #222; border-radius: 11px; background: #0b0b0b; padding: 12px 13px 11px; display: flex; flex-direction: column; gap: 9px; }
+    .seat.lead { border-color: rgba(217,201,163,.5); background: #0d0b07; }
+    .watch { font-size: 11px; color: #6f6f6f; }
+  </style>
+</helmet>
+<div style="width: 100%; min-height: 880px; background: #000; color: #ededed; box-sizing: border-box;">
+
+  <!-- run header -->
+  <div style="display: flex; align-items: center; gap: 20px; padding: 16px 34px; border-bottom: 1px solid #161616; background: rgba(0,0,0,.6);">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div class="rmark"><i></i><i></i><i></i><i class="g"></i><i class="s"></i><i class="g"></i><i class="g"></i><i class="g"></i><i></i></div>
+      <span style="font-weight: 600; font-size: 16px; letter-spacing: -0.02em;">ixio</span>
+    </div>
+    <div style="width: 1px; height: 20px; background: #262626;"></div>
+    <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+      <div class="mono" style="font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #d9c9a3;">Sandboxmaxxing · running</div>
+      <div style="font-size: 13px; color: #9a9a9a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px;">Build a real-time collaborative markdown editor with presence cursors, offline sync, and a share-link flow.</div>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 24px;">
+      <div style="text-align: right;"><div class="mono" style="font-size: 18px; color: #ededed;">07:41</div><div class="mono" style="font-size: 10px; color: #6a6a6a; letter-spacing: .08em;">ELAPSED</div></div>
+      <div style="text-align: right;"><div class="mono" style="font-size: 18px; color: #3ecf6a;">19</div><div class="mono" style="font-size: 10px; color: #6a6a6a; letter-spacing: .08em;">BUILDING</div></div>
+      <div style="text-align: right;"><div class="mono" style="font-size: 18px; color: #d9c9a3;">3</div><div class="mono" style="font-size: 10px; color: #6a6a6a; letter-spacing: .08em;">PUSHED</div></div>
+      <button style="display: inline-flex; align-items: center; gap: 7px; background: #0a0a0a; color: #e06c6c; border: 1px solid #2a1414; font-size: 13px; padding: 9px 15px; border-radius: 999px; cursor: pointer;">
+        <span style="width: 8px; height: 8px; background: #e06c6c; border-radius: 1px;"></span> Stop all
+      </button>
+    </div>
+  </div>
+
+  <!-- arena: two teams -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 22px 24px 28px; align-items: start;">
+
+    <!-- TEAM A -->
+    <div style="border: 1px solid #222; border-radius: 16px; background: #070707; padding: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 11px;">
+          <span style="font-family: 'SF Mono', monospace; font-size: 13px; font-weight: 600; letter-spacing: .1em; color: #ededed;">TEAM A</span>
+          <span style="font-size: 12px; color: #6f6f6f;">openengineer-classic · 12 seats</span>
+        </div>
+        <span class="mono" style="font-size: 12px; color: #8f8f8f;">8 building · 2 pushed</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px;">
+        <sc-for list="{{teamA}}" as="s" hint-placeholder-count="12">
+          <div class="seat {{ s.leadCls }}">
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <span class="dot {{ s.cls }}"></span>
+              <span style="font-size: 12.5px; color: #e6e6e6; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.role }}</span>
+            </div>
+            <div class="mono" style="font-size: 10.5px; color: #7f7f7f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.model }}</div>
+            <div class="bar"><i style="width: {{ s.pct }}; background: {{ s.fill }};"></i></div>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 11px; color: {{ s.stColor }};">{{ s.state }}</span>
+              <span class="watch">watch &#8599;</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- TEAM B -->
+    <div style="border: 1px solid #222; border-radius: 16px; background: #070707; padding: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 11px;">
+          <span style="font-family: 'SF Mono', monospace; font-size: 13px; font-weight: 600; letter-spacing: .1em; color: #ededed;">TEAM B</span>
+          <span style="font-size: 12px; color: #6f6f6f;">openengineer-classic · 12 seats</span>
+        </div>
+        <span class="mono" style="font-size: 12px; color: #8f8f8f;">11 building · 1 pushed</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px;">
+        <sc-for list="{{teamB}}" as="s" hint-placeholder-count="12">
+          <div class="seat {{ s.leadCls }}">
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <span class="dot {{ s.cls }}"></span>
+              <span style="font-size: 12.5px; color: #e6e6e6; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.role }}</span>
+            </div>
+            <div class="mono" style="font-size: 10.5px; color: #7f7f7f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.model }}</div>
+            <div class="bar"><i style="width: {{ s.pct }}; background: {{ s.fill }};"></i></div>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 11px; color: {{ s.stColor }};">{{ s.state }}</span>
+              <span class="watch">watch &#8599;</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- legend -->
+  <div style="display: flex; align-items: center; gap: 22px; padding: 0 34px 24px; font-size: 12px; color: #7c7c7c;">
+    <span style="display: inline-flex; align-items: center; gap: 7px;"><span class="dot live"></span> building</span>
+    <span style="display: inline-flex; align-items: center; gap: 7px;"><span class="dot busy"></span> thinking</span>
+    <span style="display: inline-flex; align-items: center; gap: 7px;"><span class="dot done"></span> pushed to team repo</span>
+    <span style="display: inline-flex; align-items: center; gap: 7px;"><span class="dot pending"></span> queued</span>
+    <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 7px; color: #d9c9a3;"><span style="width: 9px; height: 9px; border: 1px solid rgba(217,201,163,.6); border-radius: 3px;"></span> architect · strongest model</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"mode":{"editor":"enum","options":["free","frontier"],"default":"free","section":"Run"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const mode = this.props.mode ?? 'free';
+    const free = { strong: 'nemotron-3-ultra-free', pool: ['big-pickle','deepseek-v4-flash','mimo-v2.5-free','hy3-free'] };
+    const frontier = { strong: 'claude-opus-4.8', pool: ['gpt-5.5','kimi-k3','gemini-3-pro','deepseek-v4'] };
+    const M = mode === 'frontier' ? frontier : free;
+    const roles = ['architect','engineer','strategist','librarian','researcher','analyst','designer','product-manager','consultant','qa-engineer','technical-lead','junior-architect'];
+    const strong = new Set(['architect','engineer','technical-lead']);
+    const stColor = { live: '#3ecf6a', busy: '#e0b34c', done: '#d9c9a3', pending: '#6a6a6a' };
+    const label = { live: 'building', busy: 'thinking', done: 'pushed', pending: 'queued' };
+    const fillFor = (st) => st === 'done' ? '#d9c9a3' : st === 'busy' ? '#e0b34c' : st === 'pending' ? '#333' : '#3ecf6a';
+    const build = (states, pcts) => roles.map((role, i) => {
+      const st = states[i];
+      return {
+        role,
+        model: strong.has(role) ? M.strong : M.pool[i % M.pool.length],
+        cls: st, state: label[st], stColor: stColor[st],
+        pct: pcts[i], fill: fillFor(st),
+        leadCls: role === 'architect' ? 'lead' : ''
+      };
+    });
+    const sA = ['done','live','live','busy','live','busy','live','pending','busy','live','done','pending'];
+    const pA = ['100%','62%','48%','30%','55%','22%','70%','6%','34%','44%','100%','6%'];
+    const sB = ['live','busy','live','live','pending','live','busy','done','busy','live','live','busy'];
+    const pB = ['58%','26%','40%','66%','6%','50%','28%','100%','32%','47%','60%','24%'];
+    return { teamA: build(sA, pA), teamB: build(sB, pB), mode };
+  }
+}
+</script>
+</body>
+</html>

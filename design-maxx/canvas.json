@@ -1,0 +1,13 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · Launch", "x": 0, "y": 0, "w": 1200, "h": 820 },
+    { "file": "Arena.dc.html", "title": "2 · Arena (live)", "x": 1320, "y": 0, "w": 1200, "h": 880 },
+    { "file": "Verdict.dc.html", "title": "3 · Verdict", "x": 2640, "y": 0, "w": 1200, "h": 820 }
+  ],
+  "annotations": [
+    { "id": "n-launch", "x": 0, "y": -104, "w": 360, "text": "Launch — configure the run: brief, optional GitHub repo (gortex-indexed), team template, Free vs Frontier models, and Solo vs two competing teams." },
+    { "id": "n-arena", "x": 1320, "y": -104, "w": 380, "text": "Arena — the centerpiece. 24 agents across two rival teams, each a role on a live model in its own sandbox. Flip the Free/Frontier tweak above the artboard to swap the model tier." },
+    { "id": "n-verdict", "x": 2640, "y": -104, "w": 360, "text": "Verdict — both teams ship a working build; a judge scores them on the brief, code health, and whether it runs. Keep the winner or fork both." }
+  ],
+  "launch": { "view": "canvas" }
+}

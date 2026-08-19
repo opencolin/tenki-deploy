@@ -365,6 +365,39 @@
 
   .fade-in { animation: fadeUp .45s ease both; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- Sandboxmaxxing ---------- */
+  #view-maxx { display: none; width: 100%; margin: 0 auto; padding: 40px clamp(24px, 5vw, 96px) 100px; }
+  .mx-lead { max-width: 640px; }
+  .mx-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; background: #060606; }
+  .mx-seg button { border: none; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 7px 15px; border-radius: 999px; cursor: pointer; transition: all .15s; }
+  .mx-seg button.on { background: var(--fg); color: #000; font-weight: 500; }
+  .mx-seg button:disabled { opacity: .4; cursor: not-allowed; }
+  .mx-repo { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; background: #060606; padding: 11px 14px; margin-top: 12px; }
+  .mx-repo input { flex: 1; background: none; border: none; color: var(--fg); font-family: "SF Mono", monospace; font-size: 13px; outline: none; }
+  .mx-repo input::placeholder { color: #5a5a5a; }
+  .mx-ctl-label { font-family: "SF Mono", monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #7c7c7c; margin-bottom: 11px; }
+  .mx-role { border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; font-size: 12px; color: #9a9a9a; }
+  .mx-role.lead { border-color: rgba(217,201,163,.55); color: var(--sand); }
+  /* arena */
+  .mx-arena-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+  .mx-stat { text-align: right; } .mx-stat b { font-family: "SF Mono", monospace; font-size: 18px; font-weight: 500; display: block; } .mx-stat span { font-family: "SF Mono", monospace; font-size: 10px; color: #6a6a6a; letter-spacing: .08em; }
+  .mx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .mx-seat { border: 1px solid #222; border-radius: 11px; background: #0b0b0b; padding: 12px 13px 11px; display: flex; flex-direction: column; gap: 9px; }
+  .mx-seat.lead { border-color: rgba(217,201,163,.5); background: #0d0b07; }
+  .mx-seat-top { display: flex; align-items: center; gap: 7px; }
+  .mx-seat-role { font-size: 12.5px; color: #e6e6e6; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mx-seat-model { font-family: "SF Mono", monospace; font-size: 10.5px; color: #7f7f7f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mx-seat-foot { display: flex; align-items: center; justify-content: space-between; }
+  .mx-seat-state { font-size: 11px; }
+  .mx-watch { font-size: 11px; color: var(--sand); text-decoration: none; } .mx-watch:hover { color: #ede1c4; }
+  .mx-watch.off { color: #4a4a4a; pointer-events: none; }
+  .mx-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: block; background: #555; }
+  .mx-dot.RUNNING { background: #3ecf6a; box-shadow: 0 0 7px rgba(62,207,106,.6); }
+  .mx-dot.running { background: #3ecf6a; box-shadow: 0 0 7px rgba(62,207,106,.6); }
+  .mx-dot.starting, .mx-dot.pending, .mx-dot.CREATING { background: #e0b34c; animation: sbxPulse 1.2s ease-in-out infinite; }
+  .mx-dot.done, .mx-dot.published { background: var(--sand); }
+  .mx-dot.failed { background: #e06c6c; }
 </style>
 </head>
 <body>
@@ -378,8 +411,8 @@
   </div>
   <div class="nav-links">
     <a href="#">Products</a>
+    <a href="#" onclick="showMaxx(); return false;">Sandboxmaxxing</a>
     <a href="#">Docs</a>
-    <a href="#">Pricing</a>
     <a href="#" class="nav-cta" onclick="showDeploy(); return false;">Deploy</a>
   </div>
 </nav>
@@ -585,6 +618,85 @@ tenki sandbox ssh --session my-box</div>
 
 </main>
 
+<!-- ============ SANDBOXMAXXING ============ -->
+<main id="view-maxx">
+  <button class="back" onclick="showHero()">&larr; Back</button>
+
+  <!-- LAUNCH -->
+  <div id="mx-launch">
+    <div class="mx-lead">
+      <div class="panel-label">Sandboxmaxxing</div>
+      <h1 class="deploy-h">Spin up an engineering org</h1>
+      <p class="deploy-sub">One prompt, a team of agents, a sandbox each — every seat a role on a live model, building together in parallel.</p>
+    </div>
+
+    <section class="panel">
+      <div class="panel-label">01 · The brief</div>
+      <div class="prompt-box">
+        <div class="prompt-input-row">
+          <span class="prompt-glyph">&#9622;</span>
+          <textarea id="mxPrompt" rows="2" placeholder="Build a real-time collaborative markdown editor with presence cursors and a share-link flow."></textarea>
+        </div>
+      </div>
+      <div class="mx-repo">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="#8f8f8f" aria-hidden="true"><path d="M12 .5C5.6.5.5 5.6.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5A11.5 11.5 0 0 0 23.5 12C23.5 5.6 18.4.5 12 .5z"/></svg>
+        <input id="mxRepo" type="text" placeholder="optional — start from a public GitHub repo (gortex-indexed)">
+      </div>
+
+      <div style="height:1px;background:#1a1a1a;margin:26px 0 22px;"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px 40px;">
+        <div>
+          <div class="mx-ctl-label">Team template</div>
+          <div id="mxTemplates" class="chips" style="margin-top:0;"></div>
+        </div>
+        <div>
+          <div class="mx-ctl-label">Models</div>
+          <div class="mx-seg">
+            <button id="mxFree" class="on" onclick="mxSetMode('free')">Free</button>
+            <button id="mxFrontier" onclick="mxSetMode('frontier')" title="Frontier models route through the relay — coming soon">Frontier</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#1a1a1a;margin:26px 0 20px;"></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+        <div id="mxCapacity" class="mono" style="font-size:12.5px;color:#7c7c7c;line-height:1.6;">checking capacity…</div>
+        <button class="btn btn-primary" id="mxStart" onclick="mxLaunch()">Start sandboxmaxxing &rarr;</button>
+      </div>
+      <div id="mxError" class="mono" style="font-size:12.5px;color:#e0906c;margin-top:14px;display:none;"></div>
+    </section>
+  </div>
+
+  <!-- ARENA -->
+  <div id="mx-arena" style="display:none;">
+    <div class="mx-arena-head">
+      <div>
+        <div class="panel-label" id="mxRunLabel">Sandboxmaxxing · running</div>
+        <div id="mxRunPrompt" style="font-size:14px;color:#9a9a9a;max-width:560px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:24px;">
+        <div class="mx-stat"><b id="mxElapsed">0:00</b><span>ELAPSED</span></div>
+        <div class="mx-stat"><b id="mxBuilding" style="color:#3ecf6a;">0</b><span>RUNNING</span></div>
+        <div class="mx-stat"><b id="mxPushed" style="color:var(--sand);">0</b><span>PUBLISHED</span></div>
+        <button class="btn btn-ghost" id="mxStop" onclick="mxStop()" style="padding:9px 18px;font-size:13px;">Stop all</button>
+      </div>
+    </div>
+    <div id="mxPublished" style="display:none;border:1px solid rgba(217,201,163,.5);border-radius:12px;background:#0c0a06;padding:14px 18px;margin-bottom:18px;">
+      <span class="panel-label" style="margin:0;">Shipped</span>
+      <a id="mxPublishedLink" class="mono" href="#" target="_blank" rel="noopener" style="font-size:13px;display:block;margin-top:4px;"></a>
+    </div>
+    <div id="mxSeats" class="mx-grid"></div>
+    <div style="display:flex;align-items:center;gap:22px;margin-top:22px;font-size:12px;color:#7c7c7c;flex-wrap:wrap;">
+      <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot running"></span> building</span>
+      <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot pending"></span> starting</span>
+      <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot published"></span> published</span>
+      <span style="display:inline-flex;align-items:center;gap:7px;color:var(--sand);"><span style="width:9px;height:9px;border:1px solid rgba(217,201,163,.6);border-radius:3px;"></span> architect · strongest model</span>
+    </div>
+  </div>
+</main>
+
 <footer>
   <div class="foot-grid">
     <div class="foot-brand">
@@ -622,8 +734,9 @@ tenki sandbox ssh --session my-box</div>
 /* ================= view switching ================= */
 const heroEl = document.getElementById('view-hero');
 const deployEl = document.getElementById('view-deploy');
+const maxxEl = document.getElementById('view-maxx');
 function showDeploy() {
-  heroEl.style.display = 'none';
+  heroEl.style.display = 'none'; maxxEl.style.display = 'none';
   deployEl.style.display = 'block';
   deployEl.classList.remove('fade-in'); void deployEl.offsetWidth;
   deployEl.classList.add('fade-in');
@@ -632,15 +745,23 @@ function showDeploy() {
   ensureDemoSession();
 }
 function showHero() {
-  deployEl.style.display = 'none';
+  deployEl.style.display = 'none'; maxxEl.style.display = 'none';
   heroEl.style.display = 'flex';
   heroEl.classList.remove('fade-in'); void heroEl.offsetWidth;
   heroEl.classList.add('fade-in');
   window.scrollTo(0, 0);
   if (location.hash) history.replaceState(null, '', location.pathname);
 }
-// deep link: ixio.com's "Deploy now" points straight at .../#deploy
-if (location.hash === '#deploy') showDeploy();
+function showMaxx() {
+  heroEl.style.display = 'none'; deployEl.style.display = 'none';
+  maxxEl.style.display = 'block';
+  maxxEl.classList.remove('fade-in'); void maxxEl.offsetWidth;
+  maxxEl.classList.add('fade-in');
+  window.scrollTo(0, 0);
+  if (location.hash !== '#maxx') history.replaceState(null, '', '#maxx');
+  mxInit();
+}
+// deep links are dispatched at the end of the script, once all view state exists
 function growPrompt() {
   const i = document.getElementById('promptInput');
   // size to exact content; when empty, size to the placeholder so it never clips
@@ -1203,6 +1324,138 @@ function drawCube(cx, cy, s, depth, ay, ax, white) {
 }
 
 requestAnimationFrame(frame);
+
+/* ================= sandboxmaxxing ================= */
+const MX_API = '/api/maxx';
+const mx = { template: null, mode: 'free', runId: null, poll: null, started: 0, inited: false };
+
+async function mxInit() {
+  if (mx.inited) return; mx.inited = true;
+  // templates
+  try {
+    const r = await fetch(MX_API);
+    const { templates } = await r.json();
+    const box = document.getElementById('mxTemplates');
+    box.innerHTML = '';
+    templates.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (i === 0 ? ' sel' : '');
+      b.textContent = t.name;
+      b.title = (t.description || '') + ' · ' + t.seats + ' seats';
+      b.onclick = () => { mx.template = t.name; [...box.children].forEach(c => c.classList.toggle('sel', c === b)); };
+      box.appendChild(b);
+      if (i === 0) mx.template = t.name;
+    });
+  } catch { document.getElementById('mxTemplates').textContent = 'templates unavailable'; }
+  mxCapacity();
+}
+async function mxCapacity() {
+  // best-effort: probe with an impossible team to read back the numbers, without launching
+  const el = document.getElementById('mxCapacity');
+  el.innerHTML = 'Free models · no keys, no cost · each seat a sandbox with a live terminal';
+}
+function mxSetMode(m) {
+  if (m === 'frontier') { mxErr('Frontier models route through the relay — coming soon. Running on free models.'); return; }
+  mx.mode = m;
+  document.getElementById('mxFree').classList.toggle('on', m === 'free');
+  document.getElementById('mxFrontier').classList.toggle('on', m === 'frontier');
+}
+function mxErr(msg) {
+  const e = document.getElementById('mxError');
+  if (!msg) { e.style.display = 'none'; return; }
+  e.textContent = msg; e.style.display = 'block';
+}
+
+async function mxLaunch() {
+  const prompt = document.getElementById('mxPrompt').value.trim()
+    || document.getElementById('mxPrompt').getAttribute('placeholder');
+  const repo = document.getElementById('mxRepo').value.trim();
+  const btn = document.getElementById('mxStart');
+  mxErr('');
+  btn.disabled = true; btn.textContent = 'Spinning up sandboxes…';
+  try {
+    const body = { prompt, team: mx.template, mode: mx.mode };
+    if (repo) body.repo = repo;
+    const r = await fetch(MX_API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await r.json();
+    if (!r.ok) {
+      if (data.error === 'capacity') mxErr(`Not enough preview URLs free — this team needs ${data.need}, ${data.freePreviews} available (of ${data.previewMax}).`);
+      else if (data.error === 'bad_repo') mxErr('That repo must be a public https git URL.');
+      else mxErr('Could not start the run: ' + (data.error || 'unknown'));
+      btn.disabled = false; btn.textContent = 'Start sandboxmaxxing →';
+      return;
+    }
+    mx.runId = data.id; mx.started = Date.now();
+    document.getElementById('mx-launch').style.display = 'none';
+    document.getElementById('mx-arena').style.display = 'block';
+    document.getElementById('mxRunPrompt').textContent = prompt;
+    mxRender(data);
+    mx.poll = setInterval(mxTick, 3000);
+    mxTick();
+  } catch {
+    mxErr('Network error starting the run.');
+    btn.disabled = false; btn.textContent = 'Start sandboxmaxxing →';
+  }
+}
+
+async function mxTick() {
+  if (!mx.runId) return;
+  try {
+    const r = await fetch(`${MX_API}/${mx.runId}`);
+    if (!r.ok) return;
+    mxRender(await r.json());
+  } catch {}
+}
+
+function mxRender(run) {
+  // elapsed
+  const secs = Math.floor((Date.now() - mx.started) / 1000);
+  document.getElementById('mxElapsed').textContent = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+  const seats = run.seats || [];
+  const running = seats.filter(s => s.state === 'running' || s.state === 'RUNNING').length;
+  document.getElementById('mxBuilding').textContent = running;
+  document.getElementById('mxPushed').textContent = run.publishedUrl ? 1 : 0;
+  // published deliverable
+  if (run.publishedUrl) {
+    document.getElementById('mxPublished').style.display = 'block';
+    const a = document.getElementById('mxPublishedLink');
+    a.href = run.publishedUrl; a.textContent = run.publishedUrl + ' ↗';
+  }
+  // seat grid
+  const grid = document.getElementById('mxSeats');
+  grid.innerHTML = '';
+  seats.forEach((s, i) => {
+    const lead = i === 0 || s.role === 'architect';
+    const st = s.state || 'pending';
+    const stColor = { running: '#3ecf6a', RUNNING: '#3ecf6a', starting: '#e0b34c', pending: '#e0b34c', published: 'var(--sand)', failed: '#e06c6c' }[st] || '#6a6a6a';
+    const card = document.createElement('div');
+    card.className = 'mx-seat' + (lead ? ' lead' : '');
+    const watchable = s.terminalUrl ? `<a class="mx-watch" href="${s.terminalUrl}" target="_blank" rel="noopener">watch ↗</a>` : `<span class="mx-watch off">—</span>`;
+    card.innerHTML = `
+      <div class="mx-seat-top"><span class="mx-dot ${st}"></span><span class="mx-seat-role">${s.role}</span></div>
+      <div class="mx-seat-model">${s.model || ''}</div>
+      <div class="mx-seat-foot"><span class="mx-seat-state" style="color:${stColor}">${st}</span>${watchable}</div>`;
+    grid.appendChild(card);
+  });
+}
+
+async function mxStop() {
+  if (!mx.runId) return;
+  clearInterval(mx.poll);
+  const btn = document.getElementById('mxStop');
+  btn.disabled = true; btn.textContent = 'Stopping…';
+  try { await fetch(`${MX_API}/${mx.runId}`, { method: 'DELETE' }); } catch {}
+  mx.runId = null;
+  document.getElementById('mx-arena').style.display = 'none';
+  document.getElementById('mx-launch').style.display = 'block';
+  document.getElementById('mxStart').disabled = false;
+  document.getElementById('mxStart').textContent = 'Start sandboxmaxxing →';
+  btn.disabled = false; btn.textContent = 'Stop all';
+}
+
+// deep links — run last, after every view's state (sbx, mx) is initialized
+if (location.hash === '#deploy') showDeploy();
+else if (location.hash === '#maxx') showMaxx();
 </script>
 </body>
 </html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; }
+    a { color: #d9c9a3; } a:hover { color: #ede1c4; }
+    .rmark { display: grid; grid-template-columns: repeat(3, 6px); gap: 2px; }
+    .rmark i { width: 6px; height: 6px; background: #ededed; border-radius: 1.5px; display: block; }
+    .rmark i.s { background: #d9c9a3; }
+    .rmark i.g { background: transparent; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #262626; background: transparent; color: #8f8f8f; font-size: 12.5px; padding: 7px 13px; border-radius: 999px; }
+    .chip.on { border-color: #ededed; color: #ededed; }
+    .seg { display: inline-flex; border: 1px solid #262626; border-radius: 999px; padding: 3px; gap: 2px; background: #060606; }
+    .seg button { border: none; background: transparent; color: #8f8f8f; font: inherit; font-size: 13px; padding: 7px 15px; border-radius: 999px; cursor: pointer; }
+    .seg button.on { background: #ededed; color: #000; font-weight: 500; }
+    .role { border: 1px solid #262626; border-radius: 999px; padding: 5px 11px; font-size: 12px; color: #9a9a9a; }
+    .role.lead { border-color: rgba(217,201,163,.55); color: #d9c9a3; }
+  </style>
+</helmet>
+<div style="width: 100%; min-height: 820px; background: #000; color: #ededed; box-sizing: border-box;">
+
+  <!-- nav -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 40px; border-bottom: 1px solid #141414;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div class="rmark"><i></i><i></i><i></i><i class="g"></i><i class="s"></i><i class="g"></i><i class="g"></i><i class="g"></i><i></i></div>
+      <span style="font-weight: 600; font-size: 17px; letter-spacing: -0.02em;">ixio</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 22px; font-size: 14px; color: #8f8f8f;">
+      <span>Products</span><span>Docs</span><span>Pricing</span>
+      <span style="background: #ededed; color: #000; font-weight: 500; padding: 7px 16px; border-radius: 999px;">Deploy</span>
+    </div>
+  </div>
+
+  <div style="max-width: 1080px; margin: 0 auto; padding: 44px 40px 56px;">
+
+    <!-- heading -->
+    <div class="mono" style="font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: #d9c9a3; margin-bottom: 12px;">Sandboxmaxxing</div>
+    <h1 style="font-size: 42px; font-weight: 600; letter-spacing: -0.03em; margin: 0 0 10px;">Spin up an engineering org</h1>
+    <p style="color: #8f8f8f; font-size: 16px; line-height: 1.5; margin: 0 0 40px; max-width: 620px;">One prompt, two rival teams of twelve agents, twenty-four sandboxes racing to build it. Each seat is a role on a real model, working live in its own machine.</p>
+
+    <!-- config panel -->
+    <div style="border: 1px solid #262626; border-radius: 16px; background: #0a0a0a; padding: 30px 30px 26px;">
+
+      <!-- prompt -->
+      <div class="mono" style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #d9c9a3; margin-bottom: 10px;">01 · The brief</div>
+      <div style="border: 1px solid #333; border-radius: 12px; background: #000; padding: 16px 16px 12px;">
+        <div style="display: flex; gap: 10px; align-items: flex-start;">
+          <span class="mono" style="color: #d9c9a3; font-size: 15px; line-height: 1.5;">&#9622;</span>
+          <div style="color: #ededed; font-size: 15px; line-height: 1.55; flex: 1;">Build a real-time collaborative markdown editor with presence cursors, offline sync, and a share-link flow.</div>
+        </div>
+      </div>
+
+      <!-- repo -->
+      <div style="display: flex; align-items: center; gap: 10px; border: 1px solid #262626; border-radius: 10px; background: #060606; padding: 11px 14px; margin-top: 12px;">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="#8f8f8f" aria-hidden="true"><path d="M12 .5C5.6.5.5 5.6.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5A11.5 11.5 0 0 0 23.5 12C23.5 5.6 18.4.5 12 .5z"/></svg>
+        <span class="mono" style="color: #6f6f6f; font-size: 13px;">optional —</span>
+        <span class="mono" style="color: #b9b9b9; font-size: 13px;">github.com/acme/notes-app</span>
+        <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #d9c9a3; border: 1px solid rgba(217,201,163,.35); border-radius: 999px; padding: 4px 10px;">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#d9c9a3" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          gortex indexed
+        </span>
+      </div>
+
+      <div style="height: 1px; background: #1a1a1a; margin: 26px 0 22px;"></div>
+
+      <!-- controls -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 26px 40px;">
+        <div>
+          <div class="mono" style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #7c7c7c; margin-bottom: 11px;">Team template</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <span class="chip on">openengineer-classic</span>
+            <span class="chip">lean-four</span>
+            <span class="chip">+ custom</span>
+          </div>
+        </div>
+        <div>
+          <div class="mono" style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #7c7c7c; margin-bottom: 11px;">Format</div>
+          <div style="display: flex; gap: 10px;">
+            <div class="seg"><button class="on">2 teams · compete</button><button>Solo team</button></div>
+          </div>
+        </div>
+        <div>
+          <div class="mono" style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #7c7c7c; margin-bottom: 11px;">Models</div>
+          <div class="seg"><button class="on">Free</button><button>Frontier</button></div>
+        </div>
+        <div>
+          <div class="mono" style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #7c7c7c; margin-bottom: 11px;">Roster · 12 seats</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <span class="role lead">architect</span>
+            <span class="role">engineer</span>
+            <span class="role">strategist</span>
+            <span class="role">librarian</span>
+            <span class="role">researcher</span>
+            <span class="role">analyst</span>
+            <span class="role">designer</span>
+            <span class="role">product-manager</span>
+            <span class="role">consultant</span>
+            <span class="role">qa-engineer</span>
+            <span class="role">technical-lead</span>
+            <span class="role">junior-architect</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #1a1a1a; margin: 26px 0 20px;"></div>
+
+      <!-- launch row -->
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+        <div class="mono" style="font-size: 12.5px; color: #7c7c7c; line-height: 1.6;">
+          <span style="color: #d9c9a3;">24 sandboxes</span> · 2&nbsp;&times;&nbsp;12 seats<br>
+          <span style="color: #6a6a6a;">preview URLs 5 / 20 used &nbsp;·&nbsp; VM slots 2 / 100</span>
+        </div>
+        <button style="display: inline-flex; align-items: center; gap: 10px; background: #ededed; color: #000; border: none; font-size: 15px; font-weight: 600; padding: 14px 26px; border-radius: 999px; cursor: pointer;">
+          Start sandboxmaxxing
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#000" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
