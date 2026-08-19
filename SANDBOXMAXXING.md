@@ -255,6 +255,18 @@ output with **no viewer connected**.
 Fork/push (writing results back to GitHub) is deferred — it needs the user's
 GitHub token, a separate credential decision.
 
+## Watch drops into the live opencode TUI (2026-08-19)
+
+Seats run opencode's **TUI** in a detached **tmux** session (`tmux new-session
+-d -s agent 'opencode --auto --model … --prompt …'`), not `opencode run` piped
+to a file. The file path prints a bare `$ command` transcript that reads like a
+shell; the TUI in a real pty is the live interface. tmux makes it both
+autonomous and attachable. On-demand **watch** now runs `tmux attach -rt agent`
+(read-only) under ttyd, so opening a seat drops into the running opencode —
+code being written live, token meter, model, `esc interrupt` — instead of a log
+tail. tmux (absent from the base image) installs in ~5s via apt at seat start.
+Verified in-browser: the watch URL shows the live TUI writing the app.
+
 ## Two teams, Frontier, headless seats, judge (shipped 2026-08-19)
 
 - **Headless seats.** Seats no longer each hold a ttyd preview URL — they run

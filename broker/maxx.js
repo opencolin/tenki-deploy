@@ -161,7 +161,16 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
       ...setup,
       `echo ${cfgB64} | base64 -d > /home/tenki/work/opencode.json`,
       `cat > /tmp/prompt.txt <<'PROMPT'\n${seat.duty}\n\nBUILD REQUEST:\n${run.prompt}${repoNote}${publishNote}\nPROMPT`,
-      `cd /home/tenki/work && exec opencode run --auto --model ${model} "$(cat /tmp/prompt.txt)"`,
+      // Run opencode's TUI in a detached tmux session, not `opencode run`
+      // piped to a file: the file path prints a bare "$ command" transcript
+      // (looks like a shell), whereas the TUI in a real pty is the live
+      // interface. tmux makes it BOTH autonomous and attachable, so watch
+      // drops into the running opencode rather than a log tail.
+      `command -v tmux >/dev/null 2>&1 || { sudo apt-get update >/tmp/tmux-install.log 2>&1; sudo apt-get install -y tmux >>/tmp/tmux-install.log 2>&1; }`,
+      `cat > /tmp/agent-cmd.sh <<'CMD'\n#!/bin/bash\ncd /home/tenki/work\nexec opencode --auto --model __MODEL__ --prompt "$(cat /tmp/prompt.txt)"\nCMD`,
+      `sed -i "s|__MODEL__|${model}|" /tmp/agent-cmd.sh && chmod +x /tmp/agent-cmd.sh`,
+      `tmux kill-server 2>/dev/null; tmux new-session -d -s agent -x 220 -y 50 'bash /tmp/agent-cmd.sh'`,
+      `echo "[maxx] opencode running in tmux session 'agent' — watch attaches to the live TUI"`,
     ];
     await runHeadless(session, body);
     seat.state = "running"; seat.terminalUrl = null;
@@ -336,11 +345,14 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
       const s = await client.get(seat.id);
       if (s.state !== "RUNNING") return json(res, 409, { error: "not_running", state: s.state });
       const t = crypto.randomBytes(16).toString("base64url");
-      // pkill -x (exact process-NAME match) — never -f, which would match this
-      // shell's own command line ("ttyd -p 8080") and self-kill the exec.
+      // Attach (read-only) to the agent's tmux session, so the viewer sees the
+      // live opencode TUI. pkill -x (exact NAME) — never -f, which would match
+      // this shell's own command line and self-kill the exec.
       const start =
         `pkill -x ttyd 2>/dev/null; sleep 0.2; ` +
-        `nohup ttyd -p 8080 -W -b /t-${t} bash -lc 'tail -n +1 -f /tmp/agent.log' >/tmp/ttyd.log 2>&1 </dev/null & ` +
+        `nohup ttyd -p 8080 -W -b /t-${t} bash -lc ` +
+        `'tmux attach -rt agent 2>/dev/null || { echo; echo "  agent not attached — the run is still starting or has finished."; sleep 4; }' ` +
+        `>/tmp/ttyd.log 2>&1 </dev/null & ` +
         `sleep 0.4; curl -sf -o /dev/null http://127.0.0.1:8080/t-${t}/ && echo OK`;
       await s.exec("bash", { args: ["-lc", start], timeoutMs: 15_000 });
       const ttl = Math.max(60_000, r.deadline - Date.now());
