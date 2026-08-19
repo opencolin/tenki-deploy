@@ -699,6 +699,7 @@ http.createServer(async (req, res) => {
       if (req.method === "GET" && seg.length === 2) return maxx.templates(res);
       if (req.method === "GET" && seg.length === 3) return await maxx.get(res, seg[2]);
       if (req.method === "DELETE" && seg.length === 3) return await maxx.stop(res, seg[2]);
+      if (req.method === "POST" && seg.length === 4 && seg[3] === "watch") return await maxx.watch(req, res, seg[2]);
       return json(res, 404, { error: "not_found" });
     }
     if (seg[0] === "relay") return await relay(req, res, seg, new URL(req.url, "http://x").search);

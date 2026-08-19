@@ -320,6 +320,44 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     return json(res, 200, { ok: true });
   }
 
+  // On-demand watch: start a ttyd tailing this seat's agent log and expose it,
+  // so a preview URL is spent only on seats someone actually opens. The browser
+  // never learns seat session ids — it addresses a seat by {team, role}.
+  async function watch(req, res, runId) {
+    const r = runs[runId];
+    if (!r) return json(res, 404, { error: "not_found" });
+    const body = await readJson(req);
+    let seat = null;
+    for (const t of r.teams) if (t.tag === body.team) { seat = t.seats.find((s) => s.role === body.role); break; }
+    if (!seat || !seat.id) return json(res, 404, { error: "seat_not_found" });
+    if (seat.terminalUrl && seat.watchExpires > Date.now() + 60_000)
+      return json(res, 200, { url: seat.terminalUrl });
+    try {
+      const s = await client.get(seat.id);
+      if (s.state !== "RUNNING") return json(res, 409, { error: "not_running", state: s.state });
+      const t = crypto.randomBytes(16).toString("base64url");
+      // pkill -x (exact process-NAME match) — never -f, which would match this
+      // shell's own command line ("ttyd -p 8080") and self-kill the exec.
+      const start =
+        `pkill -x ttyd 2>/dev/null; sleep 0.2; ` +
+        `nohup ttyd -p 8080 -W -b /t-${t} bash -lc 'tail -n +1 -f /tmp/agent.log' >/tmp/ttyd.log 2>&1 </dev/null & ` +
+        `sleep 0.4; curl -sf -o /dev/null http://127.0.0.1:8080/t-${t}/ && echo OK`;
+      await s.exec("bash", { args: ["-lc", start], timeoutMs: 15_000 });
+      const ttl = Math.max(60_000, r.deadline - Date.now());
+      const exposed = await s.exposePort(8080, { ttlMs: ttl });
+      seat.terminalUrl = `${exposed.previewUrl.replace(/\/$/, "")}/t-${t}/`;
+      seat.watchExpires = exposed.expiresAt ? new Date(exposed.expiresAt).getTime() : Date.now() + ttl;
+      save();
+      log("maxx_watch", { runId, team: body.team, role: body.role });
+      return json(res, 200, { url: seat.terminalUrl });
+    } catch (e) {
+      // exposePort throws when the 20-preview-URL cap is hit — surface it kindly.
+      if (/preview|quota|limit/i.test(e.message || "")) return json(res, 503, { error: "preview_limit" });
+      log("maxx_watch_failed", { runId, role: body.role, message: e.message });
+      return json(res, 502, { error: "watch_failed" });
+    }
+  }
+
   const templates = (res) => json(res, 200, { templates: listTemplates() });
 
   // Called by the broker when a sandbox exposes a port: record the shipped app
@@ -338,5 +376,5 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     }
   }
 
-  return { start, get, stop, templates, notifyExpose };
+  return { start, get, stop, templates, watch, notifyExpose };
 }

@@ -400,6 +400,9 @@
   .mx-seat-state { font-size: 11px; }
   .mx-watch { font-size: 11px; color: var(--sand); text-decoration: none; } .mx-watch:hover { color: #ede1c4; }
   .mx-watch.off { color: #4a4a4a; pointer-events: none; }
+  .mx-watch-btn { background: none; border: none; padding: 0; font: inherit; font-size: 11px; cursor: pointer; }
+  .mx-watch-btn:hover { color: #ede1c4; text-decoration: underline dotted; }
+  .mx-watch-btn:disabled { color: #6a6a6a; cursor: default; text-decoration: none; }
   .mx-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: block; background: #555; }
   .mx-dot.RUNNING { background: #3ecf6a; box-shadow: 0 0 7px rgba(62,207,106,.6); }
   .mx-dot.running { background: #3ecf6a; box-shadow: 0 0 7px rgba(62,207,106,.6); }
@@ -708,7 +711,7 @@ tenki sandbox ssh --session my-box</div>
       <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot pending"></span> starting</span>
       <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot published"></span> shipped</span>
       <span style="display:inline-flex;align-items:center;gap:7px;color:var(--sand);"><span style="width:9px;height:9px;border:1px solid rgba(217,201,163,.6);border-radius:3px;"></span> architect · strongest model</span>
-      <span style="margin-left:auto;color:#6a6a6a;">seats run headless — no preview URL until they ship</span>
+      <span style="margin-left:auto;color:#6a6a6a;">seats run headless — click <span style="color:var(--sand);">watch</span> to open one live (uses one preview URL)</span>
     </div>
   </div>
 </main>
@@ -1427,16 +1430,42 @@ async function mxTick() {
   } catch {}
 }
 
-function mxSeatCard(s, i) {
+function mxSeatCard(s, i, team) {
   const lead = i === 0 || s.role === 'architect';
   const st = s.state || 'pending';
   const stColor = { running: '#3ecf6a', RUNNING: '#3ecf6a', starting: '#e0b34c', pending: '#e0b34c', published: 'var(--sand)', failed: '#e06c6c' }[st] || '#6a6a6a';
-  const watch = s.terminalUrl ? `<a class="mx-watch" href="${s.terminalUrl}" target="_blank" rel="noopener">watch ↗</a>` : `<span class="mx-watch off">headless</span>`;
+  const running = st === 'running' || st === 'RUNNING';
+  const watch = s.terminalUrl
+    ? `<a class="mx-watch" href="${s.terminalUrl}" target="_blank" rel="noopener">watch ↗</a>`
+    : running
+      ? `<button class="mx-watch mx-watch-btn" onclick="mxWatch('${team}','${s.role}',this)">watch</button>`
+      : `<span class="mx-watch off">—</span>`;
   return `<div class="mx-seat${lead ? ' lead' : ''}">
     <div class="mx-seat-top"><span class="mx-dot ${st}"></span><span class="mx-seat-role">${s.role}</span></div>
     <div class="mx-seat-model">${s.model || ''}</div>
     <div class="mx-seat-foot"><span class="mx-seat-state" style="color:${stColor}">${st}</span>${watch}</div>
   </div>`;
+}
+async function mxWatch(team, role, btn) {
+  if (!mx.runId) return;
+  const orig = btn.textContent;
+  btn.textContent = 'opening…'; btn.disabled = true;
+  const win = window.open('', '_blank'); // opened in the click gesture for popup blockers
+  try {
+    const r = await fetch(`${MX_API}/${mx.runId}/watch`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ team, role }) });
+    const d = await r.json();
+    if (!r.ok || !d.url) {
+      if (win) win.close();
+      btn.textContent = d.error === 'preview_limit' ? 'at URL cap' : 'retry';
+      btn.disabled = false;
+      return;
+    }
+    if (win) win.location = d.url; else window.open(d.url, '_blank');
+    btn.textContent = 'watching ↗';
+  } catch {
+    if (win) win.close();
+    btn.textContent = orig; btn.disabled = false;
+  }
 }
 function mxRender(run) {
   const secs = Math.floor((Date.now() - mx.started) / 1000);
@@ -1461,7 +1490,7 @@ function mxRender(run) {
         <span class="mono" style="font-size:11.5px;color:#7c7c7c;">${running} building</span>
       </div>
       <div class="mx-team-ship">${shipped}</div>
-      <div class="mx-grid">${t.seats.map(mxSeatCard).join('')}</div>
+      <div class="mx-grid">${t.seats.map((s, i) => mxSeatCard(s, i, t.tag)).join('')}</div>
     </div>`;
   }).join('');
 
