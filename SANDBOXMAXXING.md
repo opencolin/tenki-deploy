@@ -226,6 +226,35 @@ Not yet built (next increments): the **frontend team grid**, real
 working on loopback but not wired — a broker-hosted blackboard is the more
 robust alternative), and **two-team competition + judge** (P1).
 
+## Repo input + gortex indexing (shipped 2026-08-19)
+
+A run may name an existing repo (`POST /api/maxx {..., "repo":"https://…"}`).
+The broker validates it (public **https** git URL only — no ssh/file scheme,
+no inline creds, since seats clone without credentials) and every seat then:
+
+1. clones the repo into `/home/tenki/work`,
+2. installs **gortex** (single ~50 MB Go binary, ~2 s), starts its daemon, and
+   `gortex track`s the clone (a 217-file repo indexes to ~1,920 nodes in ~25 s),
+3. gets an `opencode.json` MCP entry pointing at `gortex mcp`, so the agent can
+   navigate the code graph (symbols, callers, call chains) instead of reading
+   whole files — up to ~50× cheaper on context.
+
+Each seat indexes its own clone (100 % local, no cross-sandbox coordination).
+Verified live: clone → gortex install+index → `opencode mcp list` shows gortex
+**connected** → the agent calls `gortex_search`. Whether a given free model
+prefers the graph over file reads is model behaviour; the infra delivers it.
+
+**Autonomous-agent fix (important):** ttyd runs its command *per browser
+connection*, so running the agent directly under ttyd made it start only when
+watched and die on disconnect — fine for the human demo terminal, wrong for a
+team agent. Seats now run the agent in the background (`nohup`, logging to
+`/tmp/agent.log`) and ttyd serves `tail -f` of that log: the agent runs to
+completion regardless of viewers. Verified: a seat's agent ran and produced
+output with **no viewer connected**.
+
+Fork/push (writing results back to GitHub) is deferred — it needs the user's
+GitHub token, a separate credential decision.
+
 ## Phasing
 
 - **P0 — one team, no competition:** proves coordination (shared repo,

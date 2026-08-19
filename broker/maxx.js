@@ -94,14 +94,24 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     ];
   }
 
-  // Run a seat's command under ttyd on a fresh unguessable path — watchable live.
+  // Run a seat's agent AUTONOMOUSLY and expose a live view of it.
+  //
+  // ttyd runs its command per browser connection, so running the agent directly
+  // under ttyd would make it start only when someone watches and die when they
+  // leave — wrong for a team agent that must work unattended. So the agent runs
+  // in the background (nohup, logging to /tmp/agent.log) and ttyd just serves
+  // `tail -f` of that log: the agent runs to completion regardless of viewers,
+  // and every connection sees the same live output.
   async function runUnderTtyd(session, bodyLines, ttlMs) {
     const t = crypto.randomBytes(16).toString("base64url");
-    const scriptB64 = Buffer.from(`#!/bin/bash\n${bodyLines.join("\n")}\n`).toString("base64");
+    const workB64 = Buffer.from(`#!/bin/bash\n${bodyLines.join("\n")}\n`).toString("base64");
     const start =
-      `echo ${scriptB64} | base64 -d > /tmp/launch.sh; chmod +x /tmp/launch.sh; ` +
-      `pkill -x ttyd 2>/dev/null; ` +
-      `nohup ttyd -p 8080 -W -b /t-${t} bash /tmp/launch.sh >/tmp/ttyd.log 2>&1 </dev/null & ` +
+      `echo ${workB64} | base64 -d > /tmp/work.sh; chmod +x /tmp/work.sh; ` +
+      `: > /tmp/agent.log; ` +
+      `nohup bash /tmp/work.sh >/tmp/agent.log 2>&1 </dev/null & ` +   // agent, unattended
+      `pkill -x ttyd 2>/dev/null; sleep 0.2; ` +
+      `nohup ttyd -p 8080 -W -b /t-${t} bash -lc 'tail -n +1 -f /tmp/agent.log' ` +
+      `  >/tmp/ttyd.log 2>&1 </dev/null & ` +                          // viewer, per-connection
       `sleep 0.4; curl -sf -o /dev/null http://127.0.0.1:8080/t-${t}/ && echo OK`;
     await session.exec("bash", { args: ["-lc", start], timeoutMs: 15_000 });
     const exposed = await session.exposePort(8080, { ttlMs });
@@ -125,10 +135,29 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     const publishNote = isArchitect
       ? `\n\nWhen the app is ready, serve it on port ${APP_PORT} bound to 0.0.0.0 in the background, then run: tenki-publish ${APP_PORT} — and print the resulting URL.`
       : "";
+    const repoNote = run.repoUrl
+      ? `\n\nThis sandbox is a clone of ${run.repoUrl} (working dir /home/tenki/work). It is indexed by gortex — use the gortex MCP tools to navigate the code (find symbols, callers, call chains) instead of reading whole files; it is far cheaper on context.`
+      : "";
+    // With a repo: clone it, install gortex, index it, and wire its MCP into
+    // opencode so the agent navigates the graph instead of reading files.
+    // Verified working: opencode connects to `gortex mcp` and the agent calls
+    // gortex_search once the daemon has the repo tracked.
+    const workSetup = run.repoUrl
+      ? [
+          `git clone --depth 1 ${run.repoUrl} /home/tenki/work 2>/dev/null || mkdir -p /home/tenki/work`,
+          "cd /home/tenki/work",
+          "echo '[maxx] installing gortex + indexing repo…'",
+          "curl -fsSL -o /tmp/g.tgz https://github.com/zzet/gortex/releases/latest/download/gortex_linux_amd64.tar.gz && tar xzf /tmp/g.tgz -C /tmp && sudo mv /tmp/gortex /usr/local/bin/gortex 2>/dev/null || mv /tmp/gortex $HOME/.local/bin/gortex",
+          "nohup gortex daemon start >/tmp/gortex-daemon.log 2>&1 </dev/null & sleep 2",
+          "gortex track /home/tenki/work >/tmp/gortex-track.log 2>&1 || true",
+          // opencode ignores .mcp.json (Claude's schema); write its own config
+          "cat > /home/tenki/work/opencode.json <<'OC'\n{\"$schema\":\"https://opencode.ai/config.json\",\"mcp\":{\"gortex\":{\"type\":\"local\",\"command\":[\"gortex\",\"mcp\"],\"enabled\":true}}}\nOC",
+        ]
+      : ["mkdir -p /home/tenki/work && cd /home/tenki/work"];
     const body = [
       ...seatEnv(session.id, entry),
-      "mkdir -p /home/tenki/work && cd /home/tenki/work",
-      `cat > /tmp/prompt.txt <<'PROMPT'\n${seat.duty}\n\nBUILD REQUEST:\n${run.prompt}${publishNote}\nPROMPT`,
+      ...workSetup,
+      `cat > /tmp/prompt.txt <<'PROMPT'\n${seat.duty}\n\nBUILD REQUEST:\n${run.prompt}${repoNote}${publishNote}\nPROMPT`,
       `exec opencode run --auto --model ${seat.model} "$(cat /tmp/prompt.txt)"`,
     ];
     seat.terminalUrl = await runUnderTtyd(session, body, ttl);
@@ -158,9 +187,20 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
 
   const publicRun = (r) => ({
     id: r.id, template: r.template, state: r.state, deadline: r.deadline,
-    prompt: r.prompt, error: r.error ?? null,
+    prompt: r.prompt, repoUrl: r.repoUrl ?? null, error: r.error ?? null,
     seats: r.seats.map((s) => ({ role: s.role, model: s.model, state: s.state, terminalUrl: s.terminalUrl })),
   });
+
+  // Accept only a plausible public https git URL — the seats clone it with no
+  // credentials, so a private repo or an ssh/file scheme is refused up front.
+  function cleanRepoUrl(raw) {
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    let u;
+    try { u = new URL(raw.trim()); } catch { return null; }
+    if (u.protocol !== "https:") return null;
+    if (u.username || u.password) return null;               // no inline creds
+    return u.href.replace(/\.git$/, "") + ".git";
+  }
 
   async function start(req, res) {
     const body = await readJson(req);
@@ -168,6 +208,9 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     if (!prompt) return json(res, 400, { error: "prompt_required" });
     const template = loadTemplate(body.team || "lean-four");
     if (!template) return json(res, 400, { error: "unknown_team", have: listTemplates().map((t) => t.name) });
+    // Optional: start every seat from an existing public repo, indexed by gortex.
+    const repoUrl = body.repo ? cleanRepoUrl(body.repo) : null;
+    if (body.repo && !repoUrl) return json(res, 400, { error: "bad_repo", note: "public https git URL only" });
 
     // The binding limit is preview URLs, not VMs: every watchable seat exposes
     // one (its ttyd viewer). getUsage() reports the VM cap under
@@ -191,7 +234,7 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     const models = assignModels(template.seats);
     const runId = crypto.randomBytes(6).toString("hex");
     runs[runId] = {
-      id: runId, template: template.name, prompt,
+      id: runId, template: template.name, prompt, repoUrl,
       state: "launching", createdAt: Date.now(), deadline: Date.now() + DEFAULT_DEADLINE_MS,
       seats: template.seats.map((s, i) => ({
         role: s.role, duty: s.duty, model: models[i], state: "pending", id: null, terminalUrl: null,
