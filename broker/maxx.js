@@ -1,33 +1,37 @@
-/* Sandboxmaxxing — P0: one configurable team of agents, each in its own live
- * sandbox, all building the same prompt on keyless opencode-native free models.
- * The architect seat publishes a live URL at the end.
+/* Sandboxmaxxing — configurable agent teams building one prompt in parallel
+ * sandboxes. Supports two rival teams with a judge, Free (keyless opencode
+ * native models) or Frontier (opencode → the broker's relay → Kimi K3, keys
+ * server-side), and an optional starting repo (gortex-indexed per seat).
  *
- * Scope note: P0 proves the orchestration machinery end-to-end — a named run
- * fans a prompt across role-assigned sandboxes, every seat is watchable live,
- * one publishes, the run tears down. Cross-sandbox coordination (a shared team
- * repo / blackboard) is the next increment and lands as its own tested piece;
- * it is deliberately not hand-rolled in blind here.
- *
- * Kept out of broker.js and handed only the primitives it needs, so teams stay
- * data (broker/teams/*.json) and the broker core stays readable.
+ * Seats run HEADLESS — no per-seat preview URL — so a full 24-agent run costs
+ * zero preview URLs; only each team's SHIPPED app takes one. Watchability is a
+ * later on-demand add. Teams are data (broker/teams/*.json).
  */
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
-// Keyless opencode-native free models (verified working unauthenticated). P0
-// draws seat models from here only — no API key, no rate relay.
-// north-mini-code-free is excluded: it errors.
+// Keyless opencode-native free models (verified unauthenticated). Free mode
+// draws seat models here. north-mini-code-free is excluded (it errors).
 const NATIVE_FREE = [
-  "opencode/nemotron-3-ultra-free",   // strongest — 'strongest' seats get this
+  "opencode/nemotron-3-ultra-free",   // strongest — seat 0 (lead) always gets this
   "opencode/big-pickle",
   "opencode/deepseek-v4-flash-free",
   "opencode/mimo-v2.5-free",
   "opencode/hy3-free",
 ];
+// Frontier mode routes opencode through the broker relay to a hosted model.
+// nebius/Kimi-K3 is genuinely stronger than the free tier; the seat sends its
+// per-session relayToken as the bearer, so the real key never enters the VM.
+const FRONTIER_PROVIDER = process.env.MAXX_FRONTIER_PROVIDER || "nebius";
+const FRONTIER_MODEL = process.env.MAXX_FRONTIER_MODEL || "moonshotai/Kimi-K3";
+// $0 judge: a strong OpenRouter free model scores the two builds.
+const JUDGE_MODEL = process.env.MAXX_JUDGE_MODEL || "nvidia/nemotron-3-ultra-550b-a55b:free";
+
 const APP_PORT = 3000;
 const DEFAULT_DEADLINE_MS = 30 * 60_000;
-const SEAT_STAGGER_MS = 2_000;
+const SEAT_STAGGER_MS = 1500;
+const JUDGE_MAX_WAIT_MS = 20 * 60_000;   // judge on whatever shipped by here
 
 export function createMaxx({ client, tracked, saveState, indexRelay, log, json, readJson, brokerUrl }) {
   const DIR = path.dirname(new URL(import.meta.url).pathname);
@@ -51,13 +55,13 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
       catch { return null; }
     }).filter(Boolean);
 
-  // Distinct native-free models across seats. Seat 0 is the lead/architect —
-  // the seat that decomposes the work and (in P0) publishes — so it always gets
-  // the single strongest model, whatever the template says. Other 'strongest'
-  // hints also get the top model; everyone else round-robins the rest.
-  function assignModels(seats) {
+  // Seat 0 (lead/architect) always gets the strongest model; others round-robin.
+  // Frontier: everyone on the one hosted model (relay pins it). offset shifts
+  // Team B's free lineup so the two teams differ.
+  function assignModels(seats, mode, offset) {
+    if (mode === "frontier") return seats.map(() => `relay/${FRONTIER_MODEL}`);
     const [strong, ...rest] = NATIVE_FREE;
-    let i = 0;
+    let i = offset;
     return seats.map((s, idx) =>
       s.model ? s.model
       : idx === 0 || s.modelHint === "strongest" ? strong
@@ -66,7 +70,6 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
 
   const token = () => crypto.randomBytes(24).toString("base64url");
 
-  // Register in the broker's tracked map so expose + reaper keep working.
   function trackSeat(id) {
     tracked[id] = {
       createdAt: Date.now(), ipHash: "maxx", terminal: null,
@@ -77,7 +80,7 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     return tracked[id];
   }
 
-  // Publish helper (same as the demo flow) so the architect can expose its app.
+  // Publish helper (lets a seat expose its OWN app port through the broker).
   function seatEnv(id, entry) {
     const publishHelper =
       "mkdir -p $HOME/.local/bin && cat > $HOME/.local/bin/tenki-publish <<'PUBLISH'\n" +
@@ -94,111 +97,160 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     ];
   }
 
-  // Run a seat's agent AUTONOMOUSLY and expose a live view of it.
-  //
-  // ttyd runs its command per browser connection, so running the agent directly
-  // under ttyd would make it start only when someone watches and die when they
-  // leave — wrong for a team agent that must work unattended. So the agent runs
-  // in the background (nohup, logging to /tmp/agent.log) and ttyd just serves
-  // `tail -f` of that log: the agent runs to completion regardless of viewers,
-  // and every connection sees the same live output.
-  async function runUnderTtyd(session, bodyLines, ttlMs) {
-    const t = crypto.randomBytes(16).toString("base64url");
-    const workB64 = Buffer.from(`#!/bin/bash\n${bodyLines.join("\n")}\n`).toString("base64");
-    const start =
-      `echo ${workB64} | base64 -d > /tmp/work.sh; chmod +x /tmp/work.sh; ` +
-      `: > /tmp/agent.log; ` +
-      `nohup bash /tmp/work.sh >/tmp/agent.log 2>&1 </dev/null & ` +   // agent, unattended
-      `pkill -x ttyd 2>/dev/null; sleep 0.2; ` +
-      `nohup ttyd -p 8080 -W -b /t-${t} bash -lc 'tail -n +1 -f /tmp/agent.log' ` +
-      `  >/tmp/ttyd.log 2>&1 </dev/null & ` +                          // viewer, per-connection
-      `sleep 0.4; curl -sf -o /dev/null http://127.0.0.1:8080/t-${t}/ && echo OK`;
-    await session.exec("bash", { args: ["-lc", start], timeoutMs: 15_000 });
-    const exposed = await session.exposePort(8080, { ttlMs });
-    return `${exposed.previewUrl.replace(/\/$/, "")}/t-${t}/`;
+  // The opencode.json a seat needs: a gortex MCP entry when a repo is indexed,
+  // and a relay provider when the seat runs Frontier. Merged into one file.
+  function opencodeConfig({ frontier, relayToken, gortex }) {
+    const cfg = { $schema: "https://opencode.ai/config.json" };
+    if (frontier) {
+      cfg.provider = { relay: {
+        npm: "@ai-sdk/openai-compatible", name: "relay",
+        options: { baseURL: `${brokerUrl}/relay/${FRONTIER_PROVIDER}/v1`, apiKey: relayToken },
+        models: { [FRONTIER_MODEL]: {} },
+      } };
+    }
+    if (gortex) cfg.mcp = { gortex: { type: "local", command: ["gortex", "mcp"], enabled: true } };
+    return cfg;
   }
 
-  async function launchSeat(run, seat, isArchitect) {
+  // Run a shell body HEADLESS: write it to /tmp/work.sh and nohup it (no ttyd,
+  // no exposePort → no preview URL). The agent runs to completion unattended.
+  async function runHeadless(session, bodyLines) {
+    const b64 = Buffer.from(`#!/bin/bash\n${bodyLines.join("\n")}\n`).toString("base64");
+    const start =
+      `echo ${b64} | base64 -d > /tmp/work.sh; chmod +x /tmp/work.sh; ` +
+      `: > /tmp/agent.log; nohup bash /tmp/work.sh >/tmp/agent.log 2>&1 </dev/null & echo STARTED`;
+    await session.exec("bash", { args: ["-lc", start], timeoutMs: 20_000 });
+  }
+
+  async function launchSeat(run, team, seat, isArchitect) {
     const ttl = Math.max(60_000, run.deadline - Date.now());
     const session = await client.create({
-      name: `maxx-${seat.role}-${crypto.randomBytes(3).toString("hex")}`,
+      name: `maxx-${team.tag}-${seat.role}-${crypto.randomBytes(2).toString("hex")}`,
       cpuCores: 1, memoryMb: 1024, allowInbound: true, allowOutbound: true,
       maxDurationMs: ttl, idleTimeoutMinutes: 0,
-      metadata: { demo: "true", source: "maxx", maxx: run.id, role: seat.role },
+      metadata: { demo: "true", source: "maxx", maxx: run.id, team: team.tag, role: seat.role },
       waitReady: true,
     });
     const entry = trackSeat(session.id);
     seat.id = session.id;
 
-    // The architect additionally serves its app and publishes the URL; the
-    // publish instruction is appended so the run yields one live link.
+    const frontier = run.mode === "frontier";
+    const model = seat.model;
     const publishNote = isArchitect
-      ? `\n\nWhen the app is ready, serve it on port ${APP_PORT} bound to 0.0.0.0 in the background, then run: tenki-publish ${APP_PORT} — and print the resulting URL.`
+      ? `\n\nWhen the app is ready, serve it on port ${APP_PORT} bound to 0.0.0.0 in the background, then run: tenki-publish ${APP_PORT} — and print the URL.`
       : "";
     const repoNote = run.repoUrl
-      ? `\n\nThis sandbox is a clone of ${run.repoUrl} (working dir /home/tenki/work). It is indexed by gortex — use the gortex MCP tools to navigate the code (find symbols, callers, call chains) instead of reading whole files; it is far cheaper on context.`
+      ? `\n\nThis sandbox is a clone of ${run.repoUrl} (in /home/tenki/work), indexed by gortex — use the gortex MCP tools to navigate the code instead of reading whole files.`
       : "";
-    // With a repo: clone it, install gortex, index it, and wire its MCP into
-    // opencode so the agent navigates the graph instead of reading files.
-    // Verified working: opencode connects to `gortex mcp` and the agent calls
-    // gortex_search once the daemon has the repo tracked.
-    const workSetup = run.repoUrl
+
+    const cfg = opencodeConfig({ frontier, relayToken: entry.relayToken, gortex: !!run.repoUrl });
+    const cfgB64 = Buffer.from(JSON.stringify(cfg, null, 2)).toString("base64");
+
+    const setup = run.repoUrl
       ? [
           `git clone --depth 1 ${run.repoUrl} /home/tenki/work 2>/dev/null || mkdir -p /home/tenki/work`,
           "cd /home/tenki/work",
-          "echo '[maxx] installing gortex + indexing repo…'",
-          "curl -fsSL -o /tmp/g.tgz https://github.com/zzet/gortex/releases/latest/download/gortex_linux_amd64.tar.gz && tar xzf /tmp/g.tgz -C /tmp && sudo mv /tmp/gortex /usr/local/bin/gortex 2>/dev/null || mv /tmp/gortex $HOME/.local/bin/gortex",
+          "curl -fsSL -o /tmp/g.tgz https://github.com/zzet/gortex/releases/latest/download/gortex_linux_amd64.tar.gz && tar xzf /tmp/g.tgz -C /tmp && (sudo mv /tmp/gortex /usr/local/bin/gortex 2>/dev/null || mv /tmp/gortex $HOME/.local/bin/gortex)",
           "nohup gortex daemon start >/tmp/gortex-daemon.log 2>&1 </dev/null & sleep 2",
           "gortex track /home/tenki/work >/tmp/gortex-track.log 2>&1 || true",
-          // opencode ignores .mcp.json (Claude's schema); write its own config
-          "cat > /home/tenki/work/opencode.json <<'OC'\n{\"$schema\":\"https://opencode.ai/config.json\",\"mcp\":{\"gortex\":{\"type\":\"local\",\"command\":[\"gortex\",\"mcp\"],\"enabled\":true}}}\nOC",
         ]
       : ["mkdir -p /home/tenki/work && cd /home/tenki/work"];
+
     const body = [
       ...seatEnv(session.id, entry),
-      ...workSetup,
+      ...setup,
+      `echo ${cfgB64} | base64 -d > /home/tenki/work/opencode.json`,
       `cat > /tmp/prompt.txt <<'PROMPT'\n${seat.duty}\n\nBUILD REQUEST:\n${run.prompt}${repoNote}${publishNote}\nPROMPT`,
-      `exec opencode run --auto --model ${seat.model} "$(cat /tmp/prompt.txt)"`,
+      `cd /home/tenki/work && exec opencode run --auto --model ${model} "$(cat /tmp/prompt.txt)"`,
     ];
-    seat.terminalUrl = await runUnderTtyd(session, body, ttl);
-    seat.state = "running";
+    await runHeadless(session, body);
+    seat.state = "running"; seat.terminalUrl = null;
     save();
   }
 
   async function launchRun(run) {
     try {
-      for (let k = 0; k < run.seats.length; k++) {
-        // Provisioning is staggered and async; a DELETE mid-launch must stop it
-        // creating the rest of the roster (else it races past the teardown).
-        if (run.aborted) { log("maxx_launch_aborted", { runId: run.id, at: k }); return; }
-        try { await launchSeat(run, run.seats[k], k === 0); }
-        catch (e) {
-          run.seats[k].state = "failed"; run.seats[k].error = e.message; save();
-          log("maxx_seat_failed", { runId: run.id, role: run.seats[k].role, message: e.message });
+      for (const team of run.teams) {
+        for (let k = 0; k < team.seats.length; k++) {
+          if (run.aborted) { log("maxx_launch_aborted", { runId: run.id }); return; }
+          try { await launchSeat(run, team, team.seats[k], k === 0); }
+          catch (e) {
+            team.seats[k].state = "failed"; team.seats[k].error = e.message; save();
+            log("maxx_seat_failed", { runId: run.id, team: team.tag, role: team.seats[k].role, message: e.message });
+          }
+          await new Promise((r) => setTimeout(r, SEAT_STAGGER_MS));
         }
-        if (k < run.seats.length - 1) await new Promise((r) => setTimeout(r, SEAT_STAGGER_MS));
       }
-      if (!run.aborted) { run.state = "running"; save(); log("maxx_launched", { runId: run.id, seats: run.seats.length }); }
+      if (!run.aborted) {
+        run.state = "running"; save();
+        log("maxx_launched", { runId: run.id, teams: run.teams.length, seats: run.teams.reduce((n, t) => n + t.seats.length, 0) });
+        if (run.compete) setTimeout(() => judge(run, true).catch(() => {}), JUDGE_MAX_WAIT_MS);
+      }
     } catch (e) {
       run.state = "failed"; run.error = e.message; save();
       log("maxx_launch_failed", { runId: run.id, message: e.message });
     }
   }
 
+  /* Broker-side judge — no sandbox. When both teams have shipped (or the max
+   * wait elapses), fetch both apps and score them with a free model directly.
+   * The broker holds the key, so this costs nothing and needs no VM. */
+  async function judge(run, force) {
+    if (run.verdict || run.judging || !run.compete) return;
+    const shipped = run.teams.filter((t) => t.publishedUrl);
+    if (!force && shipped.length < run.teams.length) return;   // wait for both
+    if (shipped.length === 0) return;
+    if (!process.env.OPENROUTER_API_KEY) return;
+    run.judging = true; save();
+    try {
+      const htmls = await Promise.all(run.teams.map(async (t) => {
+        if (!t.publishedUrl) return "(no build shipped)";
+        try { const r = await fetch(t.publishedUrl, { signal: AbortSignal.timeout(8000) }); return (await r.text()).slice(0, 3500); }
+        catch { return "(build unreachable)"; }
+      }));
+      const prompt =
+        `Judge two builds for this brief:\n"${run.prompt}"\n\n` +
+        `TEAM A — ${run.teams[0].publishedUrl || "did not ship"}:\n${htmls[0]}\n\n` +
+        `TEAM B — ${run.teams[1].publishedUrl || "did not ship"}:\n${htmls[1]}\n\n` +
+        `Which better fulfils the brief and looks like it actually works? ` +
+        `First line EXACTLY "WINNER: A" or "WINNER: B". Then one sentence why.`;
+      const rr = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: JUDGE_MODEL, max_tokens: 220, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const jd = await rr.json();
+      const text = (jd.choices?.[0]?.message?.content || "").trim();
+      const m = /WINNER:\s*([AB])/i.exec(text);
+      run.verdict = {
+        winner: m ? m[1].toUpperCase() : null,
+        reasoning: text.replace(/^\s*WINNER:\s*[AB]\.?\s*/i, "").trim().slice(0, 500),
+        at: Date.now(),
+      };
+      save(); log("maxx_judged", { runId: run.id, winner: run.verdict.winner });
+    } catch (e) {
+      run.verdict = { winner: null, reasoning: "Judge unavailable.", at: Date.now() };
+      save(); log("maxx_judge_failed", { runId: run.id, message: e.message });
+    } finally {
+      run.judging = false; save();
+    }
+  }
+
   const publicRun = (r) => ({
-    id: r.id, template: r.template, state: r.state, deadline: r.deadline,
-    prompt: r.prompt, repoUrl: r.repoUrl ?? null, error: r.error ?? null,
-    seats: r.seats.map((s) => ({ role: s.role, model: s.model, state: s.state, terminalUrl: s.terminalUrl })),
+    id: r.id, template: r.template, state: r.state, mode: r.mode, compete: r.compete,
+    deadline: r.deadline, prompt: r.prompt, repoUrl: r.repoUrl ?? null, error: r.error ?? null,
+    verdict: r.verdict ?? null,
+    teams: r.teams.map((t) => ({
+      tag: t.tag, publishedUrl: t.publishedUrl ?? null,
+      seats: t.seats.map((s) => ({ role: s.role, model: s.model, state: s.state, terminalUrl: s.terminalUrl ?? null })),
+    })),
   });
 
-  // Accept only a plausible public https git URL — the seats clone it with no
-  // credentials, so a private repo or an ssh/file scheme is refused up front.
   function cleanRepoUrl(raw) {
     if (typeof raw !== "string" || !raw.trim()) return null;
-    let u;
-    try { u = new URL(raw.trim()); } catch { return null; }
-    if (u.protocol !== "https:") return null;
-    if (u.username || u.password) return null;               // no inline creds
+    let u; try { u = new URL(raw.trim()); } catch { return null; }
+    if (u.protocol !== "https:" || u.username || u.password) return null;
     return u.href.replace(/\.git$/, "") + ".git";
   }
 
@@ -208,37 +260,40 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     if (!prompt) return json(res, 400, { error: "prompt_required" });
     const template = loadTemplate(body.team || "lean-four");
     if (!template) return json(res, 400, { error: "unknown_team", have: listTemplates().map((t) => t.name) });
-    // Optional: start every seat from an existing public repo, indexed by gortex.
+    const mode = body.mode === "frontier" ? "frontier" : "free";
+    const compete = body.compete === true;
     const repoUrl = body.repo ? cleanRepoUrl(body.repo) : null;
     if (body.repo && !repoUrl) return json(res, 400, { error: "bad_repo", note: "public https git URL only" });
+    if (mode === "frontier" && !/^https:\/\//.test(brokerUrl))
+      return json(res, 501, { error: "relay_unconfigured" });
 
-    // The binding limit is preview URLs, not VMs: every watchable seat exposes
-    // one (its ttyd viewer). getUsage() reports the VM cap under
-    // `max_concurrent_jobs` (=100, plenty) and this under
-    // `preview_urls_per_workspace` (=20) — the real ceiling. Leave headroom
-    // (RESERVED) for the host site + any live demo sessions.
+    const teamCount = compete ? 2 : 1;
+    const totalSeats = template.seats.length * teamCount;
+
+    // Preview-URL budget: seats are headless, so a run needs one preview URL per
+    // SHIPPED app = one per team (plus headroom). VMs (100 cap) easily cover seats.
     const RESERVED = Number(process.env.MAXX_RESERVED_PREVIEWS || 3);
     let previewMax = 20, previewUsed = 0;
     try {
       const u = (await client.getUsage()).find((x) => x.key === "preview_urls_per_workspace");
       if (u) { previewMax = u.max ?? previewMax; previewUsed = u.current ?? 0; }
     } catch {}
-    const freePreviews = previewMax - previewUsed - RESERVED;
-    if (template.seats.length > freePreviews)
-      return json(res, 503, {
-        error: "capacity", need: template.seats.length,
-        freePreviews, previewMax, previewUsed,
-        note: "limited by preview_urls_per_workspace, not VM count",
-      });
+    if (teamCount > previewMax - previewUsed - RESERVED)
+      return json(res, 503, { error: "capacity", need: teamCount, freePreviews: previewMax - previewUsed - RESERVED, previewMax, previewUsed, note: "each team ships one app (one preview URL)" });
 
-    const models = assignModels(template.seats);
+    const mkTeam = (tag, offset) => ({
+      tag, publishedUrl: null,
+      seats: assignModels(template.seats, mode, offset).map((model, i) => ({
+        role: template.seats[i].role, duty: template.seats[i].duty, model,
+        state: "pending", id: null, terminalUrl: null,
+      })),
+    });
     const runId = crypto.randomBytes(6).toString("hex");
     runs[runId] = {
-      id: runId, template: template.name, prompt, repoUrl,
+      id: runId, template: template.name, prompt, repoUrl, mode, compete,
       state: "launching", createdAt: Date.now(), deadline: Date.now() + DEFAULT_DEADLINE_MS,
-      seats: template.seats.map((s, i) => ({
-        role: s.role, duty: s.duty, model: models[i], state: "pending", id: null, terminalUrl: null,
-      })),
+      verdict: null,
+      teams: compete ? [mkTeam("A", 0), mkTeam("B", 2)] : [mkTeam("A", 0)],
     };
     save();
     launchRun(runs[runId]).catch((e) => log("maxx_bg_failed", { runId, message: e.message }));
@@ -253,8 +308,8 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
   async function stop(res, runId) {
     const r = runs[runId];
     if (!r) return json(res, 404, { error: "not_found" });
-    r.aborted = true; save();      // halt an in-flight launchRun before closing seats
-    for (const s of r.seats) {
+    r.aborted = true; save();
+    for (const team of r.teams) for (const s of team.seats) {
       if (!s.id) continue;
       try { const sess = await client.get(s.id); await sess.closeIfOpen(); } catch {}
       delete tracked[s.id];
@@ -267,14 +322,19 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
 
   const templates = (res) => json(res, 200, { templates: listTemplates() });
 
-  // Called by the broker when a sandbox exposes a port. If that sandbox belongs
-  // to a maxx run, the exposed app URL is the run's deliverable — record it.
-  // (ttyd's own port 8080 is the live viewer, not the app, so ignore it.)
+  // Called by the broker when a sandbox exposes a port: record the shipped app
+  // as its team's deliverable, then judge once both teams are in.
   function notifyExpose(sessionId, port, url) {
     if (port === 8080) return;
     for (const r of Object.values(runs)) {
-      const seat = r.seats.find((s) => s.id === sessionId);
-      if (seat) { r.publishedUrl = url; save(); log("maxx_published", { runId: r.id, role: seat.role, url }); return; }
+      for (const team of r.teams || []) {
+        if (team.seats.some((s) => s.id === sessionId)) {
+          team.publishedUrl = url; save();
+          log("maxx_published", { runId: r.id, team: team.tag, url });
+          if (r.compete) judge(r, false).catch(() => {});
+          return;
+        }
+      }
     }
   }
 

@@ -384,7 +384,13 @@
   /* arena */
   .mx-arena-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
   .mx-stat { text-align: right; } .mx-stat b { font-family: "SF Mono", monospace; font-size: 18px; font-weight: 500; display: block; } .mx-stat span { font-family: "SF Mono", monospace; font-size: 10px; color: #6a6a6a; letter-spacing: .08em; }
-  .mx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .mx-team { border: 1px solid #222; border-radius: 16px; background: #070707; padding: 16px; }
+  .mx-team.win { border-color: rgba(217,201,163,.5); background: #0c0a06; }
+  .mx-team-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .mx-team-tag { font-family: "SF Mono", monospace; font-size: 13px; font-weight: 600; letter-spacing: .1em; color: var(--fg); }
+  .mx-win-badge { color: var(--sand); font-weight: 600; letter-spacing: .04em; margin-left: 6px; }
+  .mx-team-ship { margin-bottom: 12px; min-height: 16px; }
+  .mx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
   .mx-seat { border: 1px solid #222; border-radius: 11px; background: #0b0b0b; padding: 12px 13px 11px; display: flex; flex-direction: column; gap: 9px; }
   .mx-seat.lead { border-color: rgba(217,201,163,.5); background: #0d0b07; }
   .mx-seat-top { display: flex; align-items: center; gap: 7px; }
@@ -653,10 +659,17 @@ tenki sandbox ssh --session my-box</div>
           <div id="mxTemplates" class="chips" style="margin-top:0;"></div>
         </div>
         <div>
+          <div class="mx-ctl-label">Format</div>
+          <div class="mx-seg">
+            <button id="mxSolo" class="on" onclick="mxSetFormat(false)">Solo team</button>
+            <button id="mxCompete" onclick="mxSetFormat(true)">2 teams · compete</button>
+          </div>
+        </div>
+        <div>
           <div class="mx-ctl-label">Models</div>
           <div class="mx-seg">
             <button id="mxFree" class="on" onclick="mxSetMode('free')">Free</button>
-            <button id="mxFrontier" onclick="mxSetMode('frontier')" title="Frontier models route through the relay — coming soon">Frontier</button>
+            <button id="mxFrontier" onclick="mxSetMode('frontier')" title="Frontier routes each seat through the broker relay to Kimi K3 — no key in the sandbox">Frontier · Kimi K3</button>
           </div>
         </div>
       </div>
@@ -685,16 +698,17 @@ tenki sandbox ssh --session my-box</div>
         <button class="btn btn-ghost" id="mxStop" onclick="mxStop()" style="padding:9px 18px;font-size:13px;">Stop all</button>
       </div>
     </div>
-    <div id="mxPublished" style="display:none;border:1px solid rgba(217,201,163,.5);border-radius:12px;background:#0c0a06;padding:14px 18px;margin-bottom:18px;">
-      <span class="panel-label" style="margin:0;">Shipped</span>
-      <a id="mxPublishedLink" class="mono" href="#" target="_blank" rel="noopener" style="font-size:13px;display:block;margin-top:4px;"></a>
+    <div id="mxVerdict" style="display:none;border:1px solid #1e1e1e;border-radius:14px;background:#0a0a0a;padding:16px 20px;margin-bottom:18px;">
+      <div class="panel-label" style="margin-bottom:6px;">Judge verdict</div>
+      <div id="mxVerdictText" style="font-size:14px;line-height:1.55;color:#c4c4c4;"></div>
     </div>
-    <div id="mxSeats" class="mx-grid"></div>
+    <div id="mxTeams" style="display:grid;gap:16px;align-items:start;"></div>
     <div style="display:flex;align-items:center;gap:22px;margin-top:22px;font-size:12px;color:#7c7c7c;flex-wrap:wrap;">
       <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot running"></span> building</span>
       <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot pending"></span> starting</span>
-      <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot published"></span> published</span>
+      <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mx-dot published"></span> shipped</span>
       <span style="display:inline-flex;align-items:center;gap:7px;color:var(--sand);"><span style="width:9px;height:9px;border:1px solid rgba(217,201,163,.6);border-radius:3px;"></span> architect · strongest model</span>
+      <span style="margin-left:auto;color:#6a6a6a;">seats run headless — no preview URL until they ship</span>
     </div>
   </div>
 </main>
@@ -1329,7 +1343,7 @@ requestAnimationFrame(frame);
 
 /* ================= sandboxmaxxing ================= */
 const MX_API = '/api/maxx';
-const mx = { template: null, mode: 'free', runId: null, poll: null, started: 0, inited: false };
+const mx = { template: null, mode: 'free', compete: false, runId: null, poll: null, started: 0, inited: false };
 
 async function mxInit() {
   if (mx.inited) return; mx.inited = true;
@@ -1357,10 +1371,14 @@ async function mxCapacity() {
   el.innerHTML = 'Free models · no keys, no cost · each seat a sandbox with a live terminal';
 }
 function mxSetMode(m) {
-  if (m === 'frontier') { mxErr('Frontier models route through the relay — coming soon. Running on free models.'); return; }
-  mx.mode = m;
+  mx.mode = m; mxErr('');
   document.getElementById('mxFree').classList.toggle('on', m === 'free');
   document.getElementById('mxFrontier').classList.toggle('on', m === 'frontier');
+}
+function mxSetFormat(compete) {
+  mx.compete = compete;
+  document.getElementById('mxSolo').classList.toggle('on', !compete);
+  document.getElementById('mxCompete').classList.toggle('on', compete);
 }
 function mxErr(msg) {
   const e = document.getElementById('mxError');
@@ -1376,7 +1394,7 @@ async function mxLaunch() {
   mxErr('');
   btn.disabled = true; btn.textContent = 'Spinning up sandboxes…';
   try {
-    const body = { prompt, team: mx.template, mode: mx.mode };
+    const body = { prompt, team: mx.template, mode: mx.mode, compete: mx.compete };
     if (repo) body.repo = repo;
     const r = await fetch(MX_API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const data = await r.json();
@@ -1409,36 +1427,54 @@ async function mxTick() {
   } catch {}
 }
 
+function mxSeatCard(s, i) {
+  const lead = i === 0 || s.role === 'architect';
+  const st = s.state || 'pending';
+  const stColor = { running: '#3ecf6a', RUNNING: '#3ecf6a', starting: '#e0b34c', pending: '#e0b34c', published: 'var(--sand)', failed: '#e06c6c' }[st] || '#6a6a6a';
+  const watch = s.terminalUrl ? `<a class="mx-watch" href="${s.terminalUrl}" target="_blank" rel="noopener">watch ↗</a>` : `<span class="mx-watch off">headless</span>`;
+  return `<div class="mx-seat${lead ? ' lead' : ''}">
+    <div class="mx-seat-top"><span class="mx-dot ${st}"></span><span class="mx-seat-role">${s.role}</span></div>
+    <div class="mx-seat-model">${s.model || ''}</div>
+    <div class="mx-seat-foot"><span class="mx-seat-state" style="color:${stColor}">${st}</span>${watch}</div>
+  </div>`;
+}
 function mxRender(run) {
-  // elapsed
   const secs = Math.floor((Date.now() - mx.started) / 1000);
   document.getElementById('mxElapsed').textContent = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
-  const seats = run.seats || [];
-  const running = seats.filter(s => s.state === 'running' || s.state === 'RUNNING').length;
-  document.getElementById('mxBuilding').textContent = running;
-  document.getElementById('mxPushed').textContent = run.publishedUrl ? 1 : 0;
-  // published deliverable
-  if (run.publishedUrl) {
-    document.getElementById('mxPublished').style.display = 'block';
-    const a = document.getElementById('mxPublishedLink');
-    a.href = run.publishedUrl; a.textContent = run.publishedUrl + ' ↗';
-  }
-  // seat grid
-  const grid = document.getElementById('mxSeats');
-  grid.innerHTML = '';
-  seats.forEach((s, i) => {
-    const lead = i === 0 || s.role === 'architect';
-    const st = s.state || 'pending';
-    const stColor = { running: '#3ecf6a', RUNNING: '#3ecf6a', starting: '#e0b34c', pending: '#e0b34c', published: 'var(--sand)', failed: '#e06c6c' }[st] || '#6a6a6a';
-    const card = document.createElement('div');
-    card.className = 'mx-seat' + (lead ? ' lead' : '');
-    const watchable = s.terminalUrl ? `<a class="mx-watch" href="${s.terminalUrl}" target="_blank" rel="noopener">watch ↗</a>` : `<span class="mx-watch off">—</span>`;
-    card.innerHTML = `
-      <div class="mx-seat-top"><span class="mx-dot ${st}"></span><span class="mx-seat-role">${s.role}</span></div>
-      <div class="mx-seat-model">${s.model || ''}</div>
-      <div class="mx-seat-foot"><span class="mx-seat-state" style="color:${stColor}">${st}</span>${watchable}</div>`;
-    grid.appendChild(card);
-  });
+  const teams = run.teams || [];
+  const allSeats = teams.flatMap(t => t.seats);
+  document.getElementById('mxBuilding').textContent = allSeats.filter(s => s.state === 'running' || s.state === 'RUNNING').length;
+  document.getElementById('mxPushed').textContent = teams.filter(t => t.publishedUrl).length;
+
+  // teams
+  const wrap = document.getElementById('mxTeams');
+  wrap.style.gridTemplateColumns = teams.length > 1 ? '1fr 1fr' : '1fr';
+  wrap.innerHTML = teams.map(t => {
+    const shipped = t.publishedUrl
+      ? `<a class="mx-watch" href="${t.publishedUrl}" target="_blank" rel="noopener" style="font-size:12px;">${t.publishedUrl.replace('https://','')} ↗</a>`
+      : `<span class="mono" style="font-size:11.5px;color:#6a6a6a;">building…</span>`;
+    const running = t.seats.filter(s => s.state === 'running' || s.state === 'RUNNING').length;
+    const won = run.verdict && run.verdict.winner === t.tag;
+    return `<div class="mx-team${won ? ' win' : ''}">
+      <div class="mx-team-head">
+        <span class="mx-team-tag">TEAM ${t.tag}${won ? ' <span class="mx-win-badge">✦ winner</span>' : ''}</span>
+        <span class="mono" style="font-size:11.5px;color:#7c7c7c;">${running} building</span>
+      </div>
+      <div class="mx-team-ship">${shipped}</div>
+      <div class="mx-grid">${t.seats.map(mxSeatCard).join('')}</div>
+    </div>`;
+  }).join('');
+
+  // verdict
+  const v = document.getElementById('mxVerdict');
+  if (run.verdict) {
+    v.style.display = 'block';
+    const w = run.verdict.winner ? `Team ${run.verdict.winner} wins` : 'Judge call';
+    document.getElementById('mxVerdictText').innerHTML = `<b style="color:var(--sand);">${w}.</b> ${run.verdict.reasoning || ''}`;
+  } else if (run.compete) {
+    v.style.display = 'block';
+    document.getElementById('mxVerdictText').textContent = teams.every(t => t.publishedUrl) ? 'Both shipped — judging…' : 'Judge waits for both teams to ship.';
+  } else { v.style.display = 'none'; }
 }
 
 async function mxStop() {

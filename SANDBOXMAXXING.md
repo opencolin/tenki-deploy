@@ -255,6 +255,29 @@ output with **no viewer connected**.
 Fork/push (writing results back to GitHub) is deferred — it needs the user's
 GitHub token, a separate credential decision.
 
+## Two teams, Frontier, headless seats, judge (shipped 2026-08-19)
+
+- **Headless seats.** Seats no longer each hold a ttyd preview URL — they run
+  the agent via `nohup` and expose nothing. A full 24-agent run costs **zero**
+  preview URLs; only each team's shipped app takes one. Verified: 8 seats up,
+  `preview_urls_per_workspace` unchanged at 5/20. This is what makes the
+  two-team vision fit under the 20-URL cap.
+- **Two teams + judge.** `POST /api/maxx {compete:true}` runs Team A + Team B
+  (Team B's free lineup offset so they differ; both architects on the strongest
+  model). When both ship (or after `JUDGE_MAX_WAIT_MS`), the broker fetches both
+  apps and scores them with a free model **directly — no judge sandbox, no
+  preview URL** — storing `run.verdict {winner, reasoning}`. Verified: two teams
+  launch headless with distinct lineups; the arena renders A-vs-B with a verdict
+  panel.
+- **Frontier via the relay.** `mode:"frontier"` points each seat's opencode at a
+  custom OpenAI-compatible provider → the broker relay → **Kimi K3 on Nebius**.
+  The seat's bearer is its per-session relayToken (32 chars), so the real key
+  never enters the VM. Verified end to end: a seat ran `build · moonshotai/
+  Kimi-K3` with tool calls through the relay.
+- **Frontend.** The site's `#maxx` view has Solo/Compete and Free/Frontier
+  toggles; the arena renders one or two team columns of headless seat cards plus
+  the judge verdict.
+
 ## Phasing
 
 - **P0 — one team, no competition:** proves coordination (shared repo,
