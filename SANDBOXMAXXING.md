@@ -267,6 +267,18 @@ code being written live, token meter, model, `esc interrupt` — instead of a lo
 tail. tmux (absent from the base image) installs in ~5s via apt at seat start.
 Verified in-browser: the watch URL shows the live TUI writing the app.
 
+## The shipped deliverable persists (2026-08-19)
+
+The end product shouldn't turn to sand when the run ends. On publish
+(`notifyExpose`), the shipping seat is made **sticky** (`updateSession
+{sticky:true}`), flagged `keep` so the reaper skips it, and its preview URL is
+exposed with a **30-day** TTL instead of the ~deadline TTL (the URL's TTL is
+fixed at first expose and can't be extended). Worker seats still expire.
+`DELETE /api/maxx/:id` keeps published seats and returns `{kept:[url…]}`;
+`?all=1` tears everything down. The "Stop all" button surfaces the kept
+URL(s) and offers "Release apps". Verified: after stop, the seat stays
+RUNNING+sticky and the deliverable still serves 200.
+
 ## Two teams, Frontier, headless seats, judge (shipped 2026-08-19)
 
 - **Headless seats.** Seats no longer each hold a ttyd preview URL — they run

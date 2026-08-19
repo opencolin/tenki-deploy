@@ -314,19 +314,24 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
     return r ? json(res, 200, publicRun(r)) : json(res, 404, { error: "not_found" });
   }
 
-  async function stop(res, runId) {
+  // Stop the run's agents. By default the shipped deliverable(s) are KEPT alive
+  // — stopping the agents shouldn't destroy the end product. `releaseAll` also
+  // tears the deliverables down (full cleanup).
+  async function stop(res, runId, releaseAll) {
     const r = runs[runId];
     if (!r) return json(res, 404, { error: "not_found" });
     r.aborted = true; save();
+    const kept = [];
     for (const team of r.teams) for (const s of team.seats) {
       if (!s.id) continue;
+      if (s.published && !releaseAll) { if (team.publishedUrl) kept.push(team.publishedUrl); continue; }
       try { const sess = await client.get(s.id); await sess.closeIfOpen(); } catch {}
       delete tracked[s.id];
     }
     saveState(); indexRelay();
-    r.state = "stopped"; save();
-    log("maxx_stopped", { runId });
-    return json(res, 200, { ok: true });
+    r.state = releaseAll ? "released" : "stopped"; save();
+    log("maxx_stopped", { runId, kept: kept.length, releaseAll: !!releaseAll });
+    return json(res, 200, { ok: true, kept });
   }
 
   // On-demand watch: start a ttyd tailing this seat's agent log and expose it,
@@ -375,12 +380,21 @@ export function createMaxx({ client, tracked, saveState, indexRelay, log, json, 
   // Called by the broker when a sandbox exposes a port: record the shipped app
   // as its team's deliverable, then judge once both teams are in.
   function notifyExpose(sessionId, port, url) {
-    if (port === 8080) return;
+    if (port === 8080) return;   // ttyd viewer, not the app
     for (const r of Object.values(runs)) {
       for (const team of r.teams || []) {
-        if (team.seats.some((s) => s.id === sessionId)) {
-          team.publishedUrl = url; save();
-          log("maxx_published", { runId: r.id, team: team.tag, url });
+        const seat = team.seats.find((s) => s.id === sessionId);
+        if (seat) {
+          team.publishedUrl = url;
+          seat.published = true;
+          // The shipped app is the deliverable — keep this sandbox alive past
+          // the run deadline and exempt it from the reaper, so the end product
+          // doesn't turn to sand. Worker seats still expire normally.
+          if (tracked[sessionId]) { tracked[sessionId].keep = true; saveState(); }
+          client.updateSession(sessionId, { sticky: true })
+            .catch((e) => log("maxx_keep_failed", { id: sessionId, message: e.message }));
+          save();
+          log("maxx_published", { runId: r.id, team: team.tag, url, kept: true });
           if (r.compete) judge(r, false).catch(() => {});
           return;
         }

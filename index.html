@@ -1506,18 +1506,40 @@ function mxRender(run) {
   } else { v.style.display = 'none'; }
 }
 
-async function mxStop() {
-  if (!mx.runId) return;
-  clearInterval(mx.poll);
-  const btn = document.getElementById('mxStop');
-  btn.disabled = true; btn.textContent = 'Stopping…';
-  try { await fetch(`${MX_API}/${mx.runId}`, { method: 'DELETE' }); } catch {}
+function mxBackToLaunch() {
   mx.runId = null;
   document.getElementById('mx-arena').style.display = 'none';
   document.getElementById('mx-launch').style.display = 'block';
   document.getElementById('mxStart').disabled = false;
   document.getElementById('mxStart').textContent = 'Start sandboxmaxxing →';
-  btn.disabled = false; btn.textContent = 'Stop all';
+  const btn = document.getElementById('mxStop');
+  btn.disabled = false; btn.textContent = 'Stop all'; btn.onclick = mxStop;
+}
+async function mxStop() {
+  if (!mx.runId) return;
+  const rid = mx.runId;
+  clearInterval(mx.poll);
+  const btn = document.getElementById('mxStop');
+  btn.disabled = true; btn.textContent = 'Stopping…';
+  let kept = [];
+  try { const r = await fetch(`${MX_API}/${rid}`, { method: 'DELETE' }); kept = (await r.json()).kept || []; } catch {}
+  if (kept.length) {
+    // The agents stopped, but the shipped app(s) stay live — surface them.
+    const v = document.getElementById('mxVerdict'); v.style.display = 'block';
+    document.getElementById('mxVerdictText').innerHTML =
+      `<b style="color:var(--sand);">Agents stopped — the shipped ${kept.length > 1 ? 'apps stay' : 'app stays'} live.</b> ` +
+      kept.map(u => `<a href="${u}" target="_blank" rel="noopener" style="color:var(--sand);">${u.replace('https://','')} ↗</a>`).join(' · ');
+    btn.disabled = false; btn.textContent = 'Release apps';
+    btn.onclick = () => mxReleaseAll(rid);
+  } else {
+    mxBackToLaunch();
+  }
+}
+async function mxReleaseAll(rid) {
+  const btn = document.getElementById('mxStop');
+  btn.disabled = true; btn.textContent = 'Releasing…';
+  try { await fetch(`${MX_API}/${rid}?all=1`, { method: 'DELETE' }); } catch {}
+  mxBackToLaunch();
 }
 
 // deep links — run last, after every view's state (sbx, mx) is initialized

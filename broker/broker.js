@@ -450,7 +450,12 @@ async function exposePort(req, res, id) {
   try {
     const s = await client.get(id);
     if (s.state !== "RUNNING") return json(res, 409, { error: "not_running", state: s.state });
-    const remainingMs = Math.max(60_000, new Date(s.timeoutAt) - Date.now());
+    // A maxx seat's exposed app is the run's deliverable and its sandbox is kept
+    // sticky, so give the preview URL a long life instead of the ~deadline TTL;
+    // the URL TTL is fixed at first expose and can't be extended later.
+    const remainingMs = entry.maxx
+      ? 30 * 24 * 60 * 60 * 1000
+      : Math.max(60_000, new Date(s.timeoutAt) - Date.now());
     const exposed = await s.exposePort(port, { ttlMs: remainingMs });
     entry.exposeCount = (entry.exposeCount || 0) + 1;
     saveState();
@@ -646,9 +651,10 @@ async function reap() {
     try {
       const s = await client.get(id);
       if (isTerminal(s.state)) delete tracked[id];
-      else if (past) { await s.closeIfOpen(); delete tracked[id]; log("demo_reaped", { id }); }
+      // entry.keep = a published maxx deliverable; persist it past the deadline.
+      else if (past && !entry.keep) { await s.closeIfOpen(); delete tracked[id]; log("demo_reaped", { id }); }
     } catch (e) {
-      if (e instanceof SessionNotFoundError || past) delete tracked[id];
+      if (e instanceof SessionNotFoundError || (past && !entry.keep)) delete tracked[id];
     }
   }
   saveState();
@@ -698,7 +704,7 @@ http.createServer(async (req, res) => {
       if (req.method === "POST" && seg.length === 2) return await maxx.start(req, res);
       if (req.method === "GET" && seg.length === 2) return maxx.templates(res);
       if (req.method === "GET" && seg.length === 3) return await maxx.get(res, seg[2]);
-      if (req.method === "DELETE" && seg.length === 3) return await maxx.stop(res, seg[2]);
+      if (req.method === "DELETE" && seg.length === 3) return await maxx.stop(res, seg[2], new URL(req.url, "http://x").searchParams.get("all") === "1");
       if (req.method === "POST" && seg.length === 4 && seg[3] === "watch") return await maxx.watch(req, res, seg[2]);
       return json(res, 404, { error: "not_found" });
     }
